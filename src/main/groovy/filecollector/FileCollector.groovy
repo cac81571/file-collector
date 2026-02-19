@@ -292,7 +292,7 @@ class FileCollectorFrame extends JFrame {
         addSourceHistory(src)
         def cleaned = patterns.collect { it.trim() }.findAll { it }
         if (cleaned.isEmpty()) {
-            showError("パターンを1行以上入力してください。")
+            showError("抽出条件を1行以上入力してください。")
             return
         }
 
