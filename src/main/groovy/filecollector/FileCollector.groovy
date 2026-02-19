@@ -373,8 +373,7 @@ class FileCollectorFrame extends JFrame {
         Path baseDir = Paths.get(src)
         String baseName = baseDir.getFileName() != null ? baseDir.getFileName().toString() : "filecollector"
         String suffix = zipSuffixField.text?.trim() ?: ""
-        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyMMddHHmmss"))
-        Path tempDir = Paths.get(System.getProperty("java.io.tmpdir")).resolve(baseName + "_" + timestamp)
+        Path tempDir = Paths.get(System.getProperty("java.io.tmpdir")).resolve(baseName)
         try {
             Files.createDirectories(tempDir)
             Map<String, Integer> nameCount = new HashMap<>()
@@ -480,8 +479,7 @@ class FileCollectorFrame extends JFrame {
         appendLog("ファイル tree 出力開始: $root")
         try {
             String baseName = root.getFileName() != null ? root.getFileName().toString() : "filecollector"
-            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyMMddHHmmss"))
-            Path outPath = Paths.get(System.getProperty("java.io.tmpdir")).resolve(baseName + "_" + timestamp + ".txt")
+            Path outPath = Paths.get(System.getProperty("java.io.tmpdir")).resolve(baseName + ".txt")
 
             def lines = buildTreeLines(root)
             Files.write(outPath, lines, StandardCharsets.UTF_8)
@@ -503,8 +501,7 @@ class FileCollectorFrame extends JFrame {
     private void createZipToClipboard(Path baseDir, List<Path> files) {
         String baseName = baseDir.getFileName() != null ? baseDir.getFileName().toString() : "filecollector"
         String suffix = zipSuffixField.text?.trim() ?: ""
-        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyMMddHHmmss"))
-        Path tmp = Paths.get(System.getProperty("java.io.tmpdir")).resolve(baseName + "_" + timestamp + suffix + ".zip")
+        Path tmp = Paths.get(System.getProperty("java.io.tmpdir")).resolve(baseName + ".zip" + suffix)
         Files.deleteIfExists(tmp)
         ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(tmp))
         try {
