@@ -463,6 +463,9 @@ class FileCollectorFrame extends JFrame {
             Files.createDirectories(outDir)
             Path outPath = outDir.resolve(baseName + ".tree.txt")
 
+            if (clearBeforeOutputCheckBox.isSelected()) {
+                Files.deleteIfExists(outPath)
+            }
             def lines = buildTreeLines(root)
             Files.write(outPath, lines, StandardCharsets.UTF_8)
 
