@@ -55,7 +55,6 @@ class FileCollector {
 
 class FileCollectorFrame extends JFrame {
     private final JComboBox<String> sourceDirCombo = new JComboBox<>()
-    private final JComboBox<String> matchModeCombo = new JComboBox<>(["部分一致", "glob（ワイルドカード）"] as String[])
     private final JTextArea patternArea = new JTextArea("", 6, 55)
     private final JTextField zipSuffixField = new JTextField(".txt", 35)
     private final JTextArea logArea = new JTextArea()
@@ -115,16 +114,6 @@ class FileCollectorFrame extends JFrame {
         treePanel.add(fileListButton)
         form.add(treePanel, c)
         c.gridwidth = 1
-
-        // 一致方式
-        row++
-        c.gridx = 0; c.gridy = row
-        form.add(new JLabel("🔀 一致方式:"), c)
-        c.gridx = 1; c.weightx = 0.0
-        matchModeCombo.setSelectedItem("部分一致")
-        form.add(matchModeCombo, c)
-        c.gridx = 2; c.weightx = 1.0
-        form.add(new JPanel(), c)
 
         // Pattern
         row++
@@ -302,14 +291,12 @@ class FileCollectorFrame extends JFrame {
         copyFilesButton.enabled = false
         logArea.text = ""
 
-        String matchMode = matchModeCombo.getSelectedItem()?.toString() ?: "部分一致"
         appendLog("抽出開始: $srcDir")
-        appendLog("一致方式: $matchMode")
-        appendLog("収集ファイルパターン: ${cleaned.join(', ')}")
+        appendLog("収集ファイルパターン (glob): ${cleaned.join(', ')}")
 
         new Thread({
             try {
-                def jarFiles = findFiles(srcDir, cleaned, matchMode)
+                def jarFiles = findFiles(srcDir, cleaned)
                 lastFoundFiles = jarFiles
 
                 SwingUtilities.invokeLater {
@@ -384,31 +371,35 @@ class FileCollectorFrame extends JFrame {
         return path == null ? "" : path.replace("\\", "/")
     }
 
-    private List<Path> findFiles(Path root, List<String> patterns, String matchMode) {
-        boolean partialMatch = "部分一致".equals(matchMode)
-        def result = []
+    /**
+     * ユーザー入力パターンを glob 用に正規化する。
+     * - xx/../yy → xx**yy、/.../ および ...（前後に半角空白可）→ ** に置換
+     * - 先頭に ** を付与して部分一致相当にする
+     */
+    private static String toGlobPattern(String raw) {
+        if (raw == null || raw.isEmpty()) return ""
+        String s = normalizePath(raw.trim())
+        s = s.replace("/../", "**")
+        s = s.replace("/.../", "**")
+        s = s.replaceAll(/\/\s*\.\.\.\s*\//, "**")
+        s = s.replaceAll(/\s*\.\.\.\s*/, "**")
+        return s.isEmpty() ? "" : "**" + s
+    }
 
-        if (partialMatch) {
-            def normPatterns = patterns.collect { normalizePath(it.trim()) }.findAll { it }
-            Files.walk(root).forEach { Path p ->
-                if (!Files.isRegularFile(p)) return
-                String relPath = normalizePath(root.relativize(p).toString())
-                if (normPatterns.any { relPath.contains(it) }) {
-                    result << p
-                    appendLog("追加: ${root.relativize(p)}")
-                }
-            }
-        } else {
-            def matchers = patterns.collect { pattern ->
-                FileSystems.default.getPathMatcher("glob:${pattern.trim()}")
-            }
-            Files.walk(root).forEach { Path p ->
-                if (Files.isRegularFile(p) && matchers.any {
-                    it.matches(root.relativize(p)) || it.matches(p.fileName)
-                }) {
-                    result << p
-                    appendLog("追加: ${root.relativize(p)}")
-                }
+    private List<Path> findFiles(Path root, List<String> patterns) {
+        def globPatterns = patterns.collect { toGlobPattern(it) }.findAll { it }
+        def matchers = globPatterns.collect { pattern ->
+            FileSystems.default.getPathMatcher("glob:${pattern}")
+        }
+        def result = []
+        Files.walk(root).forEach { Path p ->
+            if (!Files.isRegularFile(p)) return
+            Path rel = root.relativize(p)
+            def segs = normalizePath(rel.toString()).split("/").toList()
+            Path relNormalized = segs ? rel.getFileSystem().getPath(*segs) : rel
+            if (matchers.any { it.matches(relNormalized) || it.matches(p.fileName) }) {
+                result << p
+                appendLog("追加: ${rel}")
             }
         }
         return result
