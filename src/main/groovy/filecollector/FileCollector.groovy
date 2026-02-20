@@ -79,7 +79,8 @@ class FileCollectorFrame extends JFrame {
 
     FileCollectorFrame() {
         super("📦 ファイル収集ツール")
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE)
+        // DISPOSE_ON_CLOSE: ウィンドウを閉じても JVM を終了させない（呼び出し元プロセスが終了しない）
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE)
         setSize(800, 600)
         setLocationRelativeTo(null)
 
