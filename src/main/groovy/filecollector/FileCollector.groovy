@@ -15,6 +15,7 @@ import java.util.ArrayList
 import java.util.Collections
 import java.util.HashMap
 import java.util.Map
+import java.util.Comparator
 import java.nio.file.*
 
 class FileCollector {
@@ -64,6 +65,7 @@ class FileCollectorFrame extends JFrame {
     private final JButton copyFilesButton = new JButton("📄 ファイル出力")
     private final JButton fileListButton = new JButton("🌳 treeファイル出力")
     private final JButton removeSelectedButton = new JButton("🗑️ 選択削除")
+    private final JCheckBox clearBeforeOutputCheckBox = new JCheckBox("既存ファイル削除", true)
     private List<Path> lastFoundFiles = new ArrayList<>()
     private final List<String> sourceHistory = new ArrayList<>()
 
@@ -151,6 +153,7 @@ class FileCollectorFrame extends JFrame {
         def buttonsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT))
         buttonsPanel.add(searchButton)
         buttonsPanel.add(copyFilesButton)
+        buttonsPanel.add(clearBeforeOutputCheckBox)
         form.add(buttonsPanel, c)
 
         content.add(form, BorderLayout.NORTH)
@@ -349,8 +352,11 @@ class FileCollectorFrame extends JFrame {
         Path baseDir = Paths.get(src)
         String baseName = baseDir.getFileName() != null ? baseDir.getFileName().toString() : "filecollector"
         String suffix = zipSuffixField.text?.trim() ?: ""
-        Path outDir = Paths.get(System.getProperty("user.home"), "FileCollector", baseName)
+        Path outDir = Paths.get(System.getProperty("user.home"), "FileCollector")
         try {
+            if (clearBeforeOutputCheckBox.isSelected() && Files.exists(outDir)) {
+                Files.walk(outDir).sorted(Comparator.reverseOrder()).forEach { p -> Files.delete(p) }
+            }
             Files.createDirectories(outDir)
             Map<String, Integer> nameCount = new HashMap<>()
             lastFoundFiles.each { Path file ->
