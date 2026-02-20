@@ -349,23 +349,21 @@ class FileCollectorFrame extends JFrame {
         Path baseDir = Paths.get(src)
         String baseName = baseDir.getFileName() != null ? baseDir.getFileName().toString() : "filecollector"
         String suffix = zipSuffixField.text?.trim() ?: ""
-        Path tempDir = Paths.get(System.getProperty("java.io.tmpdir")).resolve(baseName)
+        Path outDir = Paths.get(System.getProperty("user.home"), "FileCollector", baseName)
         try {
-            Files.createDirectories(tempDir)
+            Files.createDirectories(outDir)
             Map<String, Integer> nameCount = new HashMap<>()
-            def copiedFiles = new ArrayList<File>()
             lastFoundFiles.each { Path file ->
                 String baseFileName = file.fileName.toString()
                 String nameWithSuffix = fileNameWithSuffix(baseFileName, suffix)
                 String destName = uniqueFlatName(nameWithSuffix, nameCount)
-                Path dest = tempDir.resolve(destName)
+                Path dest = outDir.resolve(destName)
                 Files.copy(file, dest, StandardCopyOption.REPLACE_EXISTING)
-                copiedFiles.add(dest.toFile())
                 appendLog("コピー: $destName")
             }
-            def clipboard = Toolkit.defaultToolkit.systemClipboard
-            clipboard.setContents(new FileListTransferable(copiedFiles), null)
-            appendLog("各ファイルを一時フォルダにコピーし、クリップボードに FileDrop 形式で出力しました。エクスプローラで貼り付けできます。")
+            appendLog("各ファイルを ${outDir} に出力しました。")
+            Desktop.getDesktop().open(outDir.toFile())
+            appendLog("出力フォルダをエクスプローラで表示しました。")
         } catch (Exception e) {
             appendLog("各ファイル出力中にエラー: ${e.message}")
             e.printStackTrace()
