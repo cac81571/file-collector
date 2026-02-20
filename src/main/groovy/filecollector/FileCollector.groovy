@@ -455,16 +455,17 @@ class FileCollectorFrame extends JFrame {
         appendLog("ファイル tree 出力開始: $root")
         try {
             String baseName = root.getFileName() != null ? root.getFileName().toString() : "filecollector"
-            Path outPath = Paths.get(System.getProperty("java.io.tmpdir")).resolve(baseName + ".txt")
+            Path outDir = Paths.get(System.getProperty("user.home"), "FileCollector")
+            Files.createDirectories(outDir)
+            Path outPath = outDir.resolve(baseName + ".tree.txt")
 
             def lines = buildTreeLines(root)
             Files.write(outPath, lines, StandardCharsets.UTF_8)
 
-            def clipboard = Toolkit.defaultToolkit.systemClipboard
-            def selection = new ZipFileTransferable(outPath.toFile())
-            clipboard.setContents(selection, null)
+            appendLog("ファイル tree を ${outPath} に出力しました。")
 
-            appendLog("ファイル tree を ${outPath} に出力し、クリップボードに FileDrop 形式でコピーしました。エクスプローラで貼り付けできます。")
+            Desktop.getDesktop().open(outDir.toFile())
+            appendLog("出力フォルダをエクスプローラで表示しました。")
         } catch (Exception e) {
             appendLog("ファイル tree 出力中にエラー: ${e.message}")
             e.printStackTrace()
