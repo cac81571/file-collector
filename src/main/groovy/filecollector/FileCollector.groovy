@@ -1,3 +1,7 @@
+/**
+ * ファイル収集ツール (FileCollector)
+ * 対象フォルダ内のファイルを glob パターンで絞り込み、一覧表示・tree 出力・ファイル出力を行う Swing アプリ。
+ */
 package filecollector
 
 import javax.swing.*
@@ -21,6 +25,7 @@ import java.nio.file.*
 class FileCollector {
 
     static void main(String[] args) {
+        // UI スレッドでフレームを起動
         SwingUtilities.invokeLater {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName())
             setUIFontMSUIGothic()
@@ -53,10 +58,12 @@ class FileCollector {
     }
 }
 
+/** メインウィンドウ。フォルダ指定・パターン入力・抽出・出力処理を行う */
 class FileCollectorFrame extends JFrame {
-    private final JComboBox<String> sourceDirCombo = new JComboBox<>()
-    private final JTextArea patternArea = new JTextArea("", 6, 55)
-    private final JTextField zipSuffixField = new JTextField(".txt", 35)
+    // --- UI コンポーネント ---
+    private final JComboBox<String> sourceDirCombo = new JComboBox<>()   // 対象フォルダ（履歴付き）
+    private final JTextArea patternArea = new JTextArea("", 6, 55)       // 抽出条件（glob、複数行可）
+    private final JTextField zipSuffixField = new JTextField(".txt", 35) // ファイル出力時の拡張子追加文字
     private final JTextArea logArea = new JTextArea()
     private final DefaultListModel<String> fileListModel = new DefaultListModel<>()
     private final JList<String> fileList = new JList<>(fileListModel)
@@ -65,7 +72,9 @@ class FileCollectorFrame extends JFrame {
     private final JButton fileListButton = new JButton("🌳 treeファイル出力")
     private final JButton removeSelectedButton = new JButton("🗑️ 選択削除")
     private final JCheckBox clearBeforeOutputCheckBox = new JCheckBox("既存ファイル削除", true)
+    // 抽出結果のファイル一覧（相対パス表示用の元データ）
     private List<Path> lastFoundFiles = new ArrayList<>()
+    // 対象フォルダの履歴（~/.filecollector-history.txt に保存）
     private final List<String> sourceHistory = new ArrayList<>()
 
     FileCollectorFrame() {
@@ -79,6 +88,7 @@ class FileCollectorFrame extends JFrame {
         initActions()
     }
 
+    /** レイアウト構築。上段フォーム + 中央（結果リスト + ログ） */
     private void initLayout() {
         def content = new JPanel(new BorderLayout(8, 8))
         content.setBorder(new EmptyBorder(8, 8, 8, 8))
@@ -95,7 +105,7 @@ class FileCollectorFrame extends JFrame {
 
         int row = 0
 
-        // Source directory
+        // 対象フォルダ行
         c.gridx = 0; c.gridy = row
         form.add(new JLabel("📁 対象フォルダ:"), c)
         c.gridx = 1; c.weightx = 1.0
@@ -106,7 +116,7 @@ class FileCollectorFrame extends JFrame {
         def browseSrc = new JButton("📂 参照...")
         form.add(browseSrc, c)
 
-        // File tree button row
+        // tree ファイル出力ボタン行
         row++
         c.gridx = 0; c.gridy = row; c.gridwidth = 3
         c.anchor = GridBagConstraints.EAST
@@ -115,7 +125,7 @@ class FileCollectorFrame extends JFrame {
         form.add(treePanel, c)
         c.gridwidth = 1
 
-        // Pattern
+        // 抽出条件（glob パターン、1行1パターン）
         row++
         c.gridx = 0; c.gridy = row
         form.add(new JLabel("🔍 抽出条件 (複数可):"), c)
@@ -135,7 +145,7 @@ class FileCollectorFrame extends JFrame {
         form.add(zipSuffixField, c)
         c.gridwidth = 1
 
-        // Buttons
+        // 抽出・ファイル出力・既存削除ボタン行
         row++
         c.gridx = 0; c.gridy = row; c.gridwidth = 3
         c.anchor = GridBagConstraints.EAST
@@ -147,6 +157,7 @@ class FileCollectorFrame extends JFrame {
 
         content.add(form, BorderLayout.NORTH)
 
+        // 中央エリア：抽出結果リスト + ログ
         logArea.setEditable(false)
         logArea.setFont(sourceDirCombo.getFont())
 
@@ -170,6 +181,7 @@ class FileCollectorFrame extends JFrame {
         browseSrc.addActionListener { chooseSourceDir() }
         copyFilesButton.enabled = false
         removeSelectedButton.enabled = false
+        // リストで選択があるときのみ「選択削除」を有効化
         fileList.addListSelectionListener {
             if (!it.valueIsAdjusting) {
                 removeSelectedButton.enabled = fileList.selectedIndices.length > 0
@@ -181,6 +193,7 @@ class FileCollectorFrame extends JFrame {
         }
     }
 
+    /** 各ボタンのアクションリスナーを登録 */
     private void initActions() {
         searchButton.addActionListener { doSearch() }
         copyFilesButton.addActionListener { doCopyFilesToClipboard() }
@@ -188,6 +201,7 @@ class FileCollectorFrame extends JFrame {
         removeSelectedButton.addActionListener { removeSelectedFromResult() }
     }
 
+    /** 抽出結果リストで選択した行を削除 */
     private void removeSelectedFromResult() {
         int[] indices = fileList.selectedIndices
         if (indices == null || indices.length == 0) return
@@ -202,6 +216,7 @@ class FileCollectorFrame extends JFrame {
         appendLog("選択した ${indices.length} 件を抽出結果から削除しました。")
     }
 
+    /** フォルダ選択ダイアログを開き、選択したパスをコンボに設定 */
     private void chooseSourceDir() {
         def chooser = new JFileChooser()
         chooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
@@ -217,12 +232,14 @@ class FileCollectorFrame extends JFrame {
         }
     }
 
+    /** コンボのエディタから現在入力されているパスを取得 */
     private String getSourceDirText() {
         def editor = sourceDirCombo.getEditor()
         def item = editor?.item
         return item?.toString()
     }
 
+    /** ~/.filecollector-history.txt から対象フォルダ履歴を読み込み */
     private void loadSourceHistory() {
         try {
             Path histPath = Paths.get(System.getProperty("user.home"), ".filecollector-history.txt")
@@ -239,6 +256,7 @@ class FileCollectorFrame extends JFrame {
         }
     }
 
+    /** 対象フォルダ履歴を ~/.filecollector-history.txt に保存 */
     private void saveSourceHistory() {
         try {
             Path histPath = Paths.get(System.getProperty("user.home"), ".filecollector-history.txt")
@@ -256,6 +274,7 @@ class FileCollectorFrame extends JFrame {
         }
     }
 
+    /** 対象フォルダを履歴の先頭に追加し、保存 */
     private void addSourceHistory(String path) {
         def v = path?.trim()
         if (!v) return
@@ -266,6 +285,7 @@ class FileCollectorFrame extends JFrame {
         saveSourceHistory()
     }
 
+    /** 対象フォルダを再帰走査し、抽出条件（glob）に合うファイルを一覧表示 */
     private void doSearch() {
         def src = getSourceDirText()?.trim()
         def patterns = patternArea.text?.readLines()
@@ -294,6 +314,7 @@ class FileCollectorFrame extends JFrame {
         appendLog("抽出開始: $srcDir")
         appendLog("収集ファイルパターン (glob): ${cleaned.join(', ')}")
 
+        // 重い走査は別スレッドで実行（UI フリーズ防止）
         new Thread({
             try {
                 def jarFiles = findFiles(srcDir, cleaned)
@@ -326,6 +347,7 @@ class FileCollectorFrame extends JFrame {
         }, "FileCollectorWorker").start()
     }
 
+    /** 抽出結果のファイルを user.home/FileCollector/ にコピーし、フォルダを開く */
     private void doCopyFilesToClipboard() {
         if (lastFoundFiles == null || lastFoundFiles.isEmpty()) {
             showError("まず抽出を行い、ファイル一覧を取得してください。")
@@ -342,6 +364,7 @@ class FileCollectorFrame extends JFrame {
         Path outDir = Paths.get(System.getProperty("user.home"), "FileCollector")
         try {
             if (clearBeforeOutputCheckBox.isSelected() && Files.exists(outDir)) {
+                // 既存ファイル削除 ON のとき、出力先フォルダの中身を全削除
                 Files.walk(outDir).sorted(Comparator.reverseOrder()).forEach { p -> Files.delete(p) }
             }
             Files.createDirectories(outDir)
@@ -379,13 +402,14 @@ class FileCollectorFrame extends JFrame {
     private static String toGlobPattern(String raw) {
         if (raw == null || raw.isEmpty()) return ""
         String s = normalizePath(raw.trim())
-        s = s.replace("/../", "**")
-        s = s.replace("/.../", "**")
-        s = s.replaceAll(/\/\s*\.\.\.\s*\//, "**")
-        s = s.replaceAll(/\s*\.\.\.\s*/, "**")
-        return s.isEmpty() ? "" : "**" + s
+        s = s.replace("/../", "**")           // xx/../yy → xx**yy
+        s = s.replace("/.../", "**")          // /.../ → **
+        s = s.replaceAll(/\/\s*\.\.\.\s*\//, "**")   // / ... /（空白あり）→ **
+        s = s.replaceAll(/\s*\.\.\.\s*/, "**")      // ...（前後空白可）→ **
+        return s.isEmpty() ? "" : "**" + s    // 部分一致相当のため先頭に ** 付与
     }
 
+    /** root 以下を再帰走査し、glob パターン（正規化済み）にマッチする通常ファイルを返す */
     private List<Path> findFiles(Path root, List<String> patterns) {
         def globPatterns = patterns.collect { toGlobPattern(it) }.findAll { it }
         def matchers = globPatterns.collect { pattern ->
@@ -395,6 +419,7 @@ class FileCollectorFrame extends JFrame {
         Files.walk(root).forEach { Path p ->
             if (!Files.isRegularFile(p)) return
             Path rel = root.relativize(p)
+            // Windows でも glob の ** が正しく動くよう、パスを / 区切りに正規化
             def segs = normalizePath(rel.toString()).split("/").toList()
             Path relNormalized = segs ? rel.getFileSystem().getPath(*segs) : rel
             if (matchers.any { it.matches(relNormalized) || it.matches(p.fileName) }) {
@@ -405,6 +430,7 @@ class FileCollectorFrame extends JFrame {
         return result
     }
 
+    /** フォルダ構造を tree 形式の行リストに変換（ルート名 + 再帰的に子要素） */
     private List<String> buildTreeLines(Path root) {
         def lines = new ArrayList<String>()
         String rootName = root.getFileName() != null ? root.getFileName().toString() : root.toString()
@@ -413,6 +439,7 @@ class FileCollectorFrame extends JFrame {
         return lines
     }
 
+    /** tree の子要素を再帰的に追記。connector（├──/└──）と prefix で階層を表現 */
     private void buildTreeRecursive(Path dir, String prefix, List<String> lines) {
         def children = new ArrayList<Path>()
         Files.newDirectoryStream(dir).withCloseable { stream ->
@@ -434,6 +461,7 @@ class FileCollectorFrame extends JFrame {
         }
     }
 
+    /** 対象フォルダの tree を user.home/FileCollector/<フォルダ名>.tree.txt に出力し、フォルダを開く */
     private void doFileListOutput() {
         def src = getSourceDirText()?.trim()
         if (!src) {
@@ -479,6 +507,7 @@ class FileCollectorFrame extends JFrame {
         return fileName + suffix
     }
 
+    /** 同名ファイル対策：2件目以降に _2, _3, ... を付与してユニークな出力名を返す */
     private static String uniqueFlatName(String baseFileName, Map<String, Integer> nameCount) {
         int count = nameCount.getOrDefault(baseFileName, 0)
         nameCount.put(baseFileName, count + 1)
@@ -495,6 +524,7 @@ class FileCollectorFrame extends JFrame {
         return namePart + "_" + (count + 1) + extPart
     }
 
+    /** クリップボード用 Transferable（現在未使用） */
     private static class ZipFileTransferable implements Transferable {
         private final File file
         private final DataFlavor[] flavors
@@ -523,6 +553,7 @@ class FileCollectorFrame extends JFrame {
         }
     }
 
+    /** クリップボード用 Transferable（現在未使用） */
     private static class FileListTransferable implements Transferable {
         private final List<File> files
         private final DataFlavor[] flavors
@@ -551,6 +582,7 @@ class FileCollectorFrame extends JFrame {
         }
     }
 
+    /** ログエリアに 1 行追記し、末尾にスクロール */
     private void appendLog(String msg) {
         SwingUtilities.invokeLater {
             logArea.append(msg + System.lineSeparator())
@@ -558,6 +590,7 @@ class FileCollectorFrame extends JFrame {
         }
     }
 
+    /** エラーダイアログを表示 */
     private void showError(String msg) {
         JOptionPane.showMessageDialog(this, msg, "入力エラー", JOptionPane.WARNING_MESSAGE)
     }
