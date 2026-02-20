@@ -16,8 +16,6 @@ import java.util.Collections
 import java.util.HashMap
 import java.util.Map
 import java.nio.file.*
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
 
 class FileCollector {
 
@@ -64,7 +62,6 @@ class FileCollectorFrame extends JFrame {
     private final JList<String> fileList = new JList<>(fileListModel)
     private final JButton searchButton = new JButton("🔍 抽出")
     private final JButton copyFilesButton = new JButton("📄 各ファイル（クリップボード出力）")
-    private final JButton zipButton = new JButton("🗜️ ZIPファイル (クリップボード出力)")
     private final JButton fileListButton = new JButton("🌳 treeファイル(クリップボード出力)")
     private final JButton removeSelectedButton = new JButton("🗑️ 選択削除")
     private List<Path> lastFoundFiles = new ArrayList<>()
@@ -154,7 +151,6 @@ class FileCollectorFrame extends JFrame {
         def buttonsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT))
         buttonsPanel.add(searchButton)
         buttonsPanel.add(copyFilesButton)
-        buttonsPanel.add(zipButton)
         form.add(buttonsPanel, c)
 
         content.add(form, BorderLayout.NORTH)
@@ -180,7 +176,6 @@ class FileCollectorFrame extends JFrame {
         content.add(center, BorderLayout.CENTER)
 
         browseSrc.addActionListener { chooseSourceDir() }
-        zipButton.enabled = false
         copyFilesButton.enabled = false
         removeSelectedButton.enabled = false
         fileList.addListSelectionListener {
@@ -197,7 +192,6 @@ class FileCollectorFrame extends JFrame {
     private void initActions() {
         searchButton.addActionListener { doSearch() }
         copyFilesButton.addActionListener { doCopyFilesToClipboard() }
-        zipButton.addActionListener { doZip() }
         fileListButton.addActionListener { doFileListOutput() }
         removeSelectedButton.addActionListener { removeSelectedFromResult() }
     }
@@ -212,7 +206,6 @@ class FileCollectorFrame extends JFrame {
                 lastFoundFiles.remove(idx)
             }
         }
-        zipButton.enabled = !lastFoundFiles.isEmpty()
         copyFilesButton.enabled = !lastFoundFiles.isEmpty()
         appendLog("選択した ${indices.length} 件を抽出結果から削除しました。")
     }
@@ -303,7 +296,6 @@ class FileCollectorFrame extends JFrame {
         }
 
         searchButton.enabled = false
-        zipButton.enabled = false
         copyFilesButton.enabled = false
         logArea.text = ""
 
@@ -338,26 +330,10 @@ class FileCollectorFrame extends JFrame {
             } finally {
                 SwingUtilities.invokeLater {
                     searchButton.enabled = true
-                    zipButton.enabled = !lastFoundFiles.isEmpty()
                     copyFilesButton.enabled = !lastFoundFiles.isEmpty()
                 }
             }
         }, "FileCollectorWorker").start()
-    }
-
-    private void doZip() {
-        if (lastFoundFiles == null || lastFoundFiles.isEmpty()) {
-            showError("まず抽出を行い、ファイル一覧を取得してください。")
-            return
-        }
-        def src = getSourceDirText()?.trim()
-        if (!src) {
-            showError("対象フォルダを指定してください。")
-            return
-        }
-        appendLog("ZIP作成開始（クリップボードへ ZIP ファイル出力）")
-        createZipToClipboard(Paths.get(src), lastFoundFiles)
-        appendLog("ZIP作成完了。クリップボードに ZIP ファイル参照をコピーしました。エクスプローラで貼り付けできます。")
     }
 
     private void doCopyFilesToClipboard() {
@@ -496,32 +472,6 @@ class FileCollectorFrame extends JFrame {
                 JOptionPane.showMessageDialog(this, "ファイル tree 出力中にエラー: ${e.message}", "エラー", JOptionPane.ERROR_MESSAGE)
             }
         }
-    }
-
-    private void createZipToClipboard(Path baseDir, List<Path> files) {
-        String baseName = baseDir.getFileName() != null ? baseDir.getFileName().toString() : "filecollector"
-        String suffix = zipSuffixField.text?.trim() ?: ""
-        Path tmp = Paths.get(System.getProperty("java.io.tmpdir")).resolve(baseName + ".zip" + suffix)
-        Files.deleteIfExists(tmp)
-        ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(tmp))
-        try {
-            Map<String, Integer> nameCount = new HashMap<>()
-            files.each { Path file ->
-                String baseFileName = file.fileName.toString()
-                String nameWithSuffix = fileNameWithSuffix(baseFileName, suffix)
-                String entryName = uniqueFlatName(nameWithSuffix, nameCount)
-                appendLog("ZIPへ追加: $entryName")
-                zos.putNextEntry(new ZipEntry(entryName))
-                Files.copy(file, zos)
-                zos.closeEntry()
-            }
-        } finally {
-            zos.close()
-        }
-
-        def clipboard = Toolkit.defaultToolkit.systemClipboard
-        def selection = new ZipFileTransferable(tmp.toFile())
-        clipboard.setContents(selection, null)
     }
 
     /** 格納ファイル名の末尾に拡張子追加文字を付与 */
