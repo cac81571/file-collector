@@ -7,7 +7,6 @@ package filecollector
 import javax.swing.*
 import javax.swing.border.EmptyBorder
 import java.awt.*
-import java.awt.datatransfer.*
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.BufferedWriter
@@ -16,7 +15,6 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.List
 import java.util.ArrayList
-import java.util.Collections
 import java.util.HashMap
 import java.util.Map
 import java.util.Comparator
@@ -188,7 +186,7 @@ class FileCollectorFrame extends JFrame {
     /** 各ボタンのアクションリスナーを登録 */
     private void initActions() {
         searchButton.addActionListener { doSearch() }
-        copyFilesButton.addActionListener { doCopyFilesToClipboard() }
+        copyFilesButton.addActionListener { doCopyFiles() }
         fileListButton.addActionListener { doFileListOutput() }
         removeSelectedButton.addActionListener { removeSelectedFromResult() }
     }
@@ -340,7 +338,7 @@ class FileCollectorFrame extends JFrame {
     }
 
     /** 抽出結果のファイルを user.home/FileCollector/ にコピーし、フォルダを開く */
-    private void doCopyFilesToClipboard() {
+    private void doCopyFiles() {
         if (lastFoundFiles == null || lastFoundFiles.isEmpty()) {
             showError("まず抽出を行い、ファイル一覧を取得してください。")
             return
@@ -516,64 +514,6 @@ class FileCollectorFrame extends JFrame {
             extPart = ""
         }
         return namePart + "_" + (count + 1) + extPart
-    }
-
-    /** クリップボード用 Transferable（現在未使用） */
-    private static class ZipFileTransferable implements Transferable {
-        private final File file
-        private final DataFlavor[] flavors
-
-        ZipFileTransferable(File file) {
-            this.file = file
-            this.flavors = [DataFlavor.javaFileListFlavor] as DataFlavor[]
-        }
-
-        @Override
-        DataFlavor[] getTransferDataFlavors() {
-            return flavors
-        }
-
-        @Override
-        boolean isDataFlavorSupported(DataFlavor flavor) {
-            flavors.any { it.equals(flavor) }
-        }
-
-        @Override
-        Object getTransferData(DataFlavor flavor) {
-            if (!isDataFlavorSupported(flavor)) {
-                throw new UnsupportedFlavorException(flavor)
-            }
-            return [file]
-        }
-    }
-
-    /** クリップボード用 Transferable（現在未使用） */
-    private static class FileListTransferable implements Transferable {
-        private final List<File> files
-        private final DataFlavor[] flavors
-
-        FileListTransferable(List<File> files) {
-            this.files = files != null ? files : Collections.emptyList()
-            this.flavors = [DataFlavor.javaFileListFlavor] as DataFlavor[]
-        }
-
-        @Override
-        DataFlavor[] getTransferDataFlavors() {
-            return flavors
-        }
-
-        @Override
-        boolean isDataFlavorSupported(DataFlavor flavor) {
-            flavors.any { it.equals(flavor) }
-        }
-
-        @Override
-        Object getTransferData(DataFlavor flavor) {
-            if (!isDataFlavorSupported(flavor)) {
-                throw new UnsupportedFlavorException(flavor)
-            }
-            return files
-        }
     }
 
     /** ログエリアに 1 行追記し、末尾にスクロール */
