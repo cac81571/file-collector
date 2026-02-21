@@ -57,7 +57,7 @@ class FileCollectorFrame extends JFrame {
     private final JList<String> fileList = new JList<>(fileListModel)
     private final JButton searchButton = new JButton("抽出")
     private final JButton copyFilesButton = new JButton("ファイル出力")
-    private final JButton fileListButton = new JButton("treeファイル出力")
+    private final JButton fileListButton = new JButton("ファイル tree 出力")
     private final JButton removeSelectedButton = new JButton("選択削除")
     private final JCheckBox clearBeforeOutputCheckBox = new JCheckBox("既存ファイル削除", true)
     // 抽出結果のファイル一覧（相対パス表示用の元データ）
