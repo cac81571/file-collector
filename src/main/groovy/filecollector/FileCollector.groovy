@@ -95,9 +95,9 @@ class FileCollectorFrame extends JFrame {
         int row = 0
 
         // 対象フォルダ行
-        c.gridx = 0; c.gridy = row
-        c.gridx = 1; c.weightx = 1.0
+        c.gridx = 0; c.gridy = row; c.anchor = GridBagConstraints.EAST; c.fill = GridBagConstraints.NONE
         form.add(new JLabel("対象フォルダ:"), c)
+        c.gridx = 1; c.weightx = 1.0; c.anchor = GridBagConstraints.WEST; c.fill = GridBagConstraints.HORIZONTAL
         sourceDirCombo.setEditable(true)
         sourceDirCombo.setPreferredSize(new Dimension(500, sourceDirCombo.getPreferredSize().height as int))
         form.add(sourceDirCombo, c)
@@ -116,9 +116,9 @@ class FileCollectorFrame extends JFrame {
 
         // 抽出条件（glob パターン、1行1パターン）
         row++
-        c.gridx = 0; c.gridy = row
-        c.gridx = 1; c.weightx = 1.0; c.gridwidth = 2
+        c.gridx = 0; c.gridy = row; c.anchor = GridBagConstraints.EAST; c.fill = GridBagConstraints.NONE
         form.add(new JLabel("抽出条件(glob, 複数可):"), c)
+        c.gridx = 1; c.weightx = 1.0; c.gridwidth = 2; c.anchor = GridBagConstraints.WEST; c.fill = GridBagConstraints.HORIZONTAL
         def patternScroll = new JScrollPane(patternArea)
         patternArea.lineWrap = true
         patternArea.wrapStyleWord = true
@@ -128,9 +128,9 @@ class FileCollectorFrame extends JFrame {
 
         // 拡張子追加文字
         row++
-        c.gridx = 0; c.gridy = row
-        c.gridx = 1; c.weightx = 1.0; c.gridwidth = 2
+        c.gridx = 0; c.gridy = row; c.anchor = GridBagConstraints.EAST; c.fill = GridBagConstraints.NONE
         form.add(new JLabel("拡張子 追加文字:"), c)
+        c.gridx = 1; c.weightx = 1.0; c.gridwidth = 2; c.anchor = GridBagConstraints.WEST; c.fill = GridBagConstraints.HORIZONTAL
         form.add(zipSuffixField, c)
         c.gridwidth = 1
 
