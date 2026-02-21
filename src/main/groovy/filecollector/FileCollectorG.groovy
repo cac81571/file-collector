@@ -195,10 +195,10 @@ class FileCollectorFrame extends JFrame {
         logPanel.add(new JLabel("ログ:"), BorderLayout.NORTH)
         logPanel.add(new JScrollPane(logArea), BorderLayout.CENTER)
 
-        // スプリットペイン設定
+        // スプリットペイン設定（ログエリアを多めに確保）
         JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, listPanel, logPanel)
-        splitPane.setDividerLocation(350)
-        splitPane.setResizeWeight(0.7)
+        splitPane.setDividerLocation(280)
+        splitPane.setResizeWeight(0.4)
 
         add(splitPane, BorderLayout.CENTER)
     }
