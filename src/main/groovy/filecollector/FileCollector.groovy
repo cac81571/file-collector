@@ -28,31 +28,19 @@ class FileCollector {
         // UI スレッドでフレームを起動
         SwingUtilities.invokeLater {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName())
-            setUIFontMSUIGothic()
-            scaleFontSize(1)
+            def defaults = UIManager.getLookAndFeelDefaults()
+            setUIFontScaleSize(defaults, "Yu Gothic UI", 1.0f)
             new FileCollectorFrame().setVisible(true)
         }
     }
 
-    /** すべての UI フォントを MS UI Gothic に統一する */
-    static void setUIFontMSUIGothic() {
-        String fontName = "MS UI Gothic"
-        def defaults = UIManager.getLookAndFeelDefaults()
+    /** すべての UI フォントを変更して一括で一回り大きくする（pointDelta: 増やすポイント数） */
+    static void setUIFontScaleSize(def defaults, String fontName, float pointDelta) {
         defaults.keySet().findAll { it.toString().endsWith(".font") }.each { key ->
             def value = defaults.get(key)
             if (value instanceof Font) {
-                UIManager.put(key, new Font(fontName, value.style, value.size))
-            }
-        }
-    }
-
-    /** UIManager のフォントを一括で一回り大きくする（pointDelta: 増やすポイント数） */
-    static void scaleFontSize(int pointDelta) {
-        def defaults = UIManager.getLookAndFeelDefaults()
-        defaults.keySet().findAll { it.toString().endsWith(".font") }.each { key ->
-            def value = defaults.get(key)
-            if (value instanceof Font) {
-                UIManager.put(key, value.deriveFont((float) (value.size + pointDelta)))
+                def baseFont = new Font(fontName, value.style as int, value.size as int)
+                UIManager.put(key, baseFont.deriveFont((value.size + pointDelta) as float))
             }
         }
     }
