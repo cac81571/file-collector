@@ -70,6 +70,7 @@ class FileCollectorFrame extends JFrame {
 
     // --- 状態管理 ---
     private AtomicBoolean isProcessing = new AtomicBoolean(false)
+    private Path searchBasePath  // 相対パス表示用の基準パス
 
     FileCollectorFrame() {
         setTitle(APP_TITLE)
@@ -175,7 +176,24 @@ class FileCollectorFrame extends JFrame {
         // --- 上部: 結果リスト ---
         listModel = new DefaultListModel<>()
         resultList = new JList<>(listModel)
-        
+        resultList.setCellRenderer(new DefaultListCellRenderer() {
+            @Override
+            Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                def c = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
+                if (value instanceof File && searchBasePath != null) {
+                    try {
+                        def rel = searchBasePath.relativize((value as File).toPath())
+                        setText(rel.toString().replace('/', '\\'))
+                    } catch (Exception e) {
+                        setText((value as File).name)
+                    }
+                } else if (value instanceof File) {
+                    setText((value as File).name)
+                }
+                return c
+            }
+        })
+
         JPanel listPanel = new JPanel(new BorderLayout())
         JPanel listHeader = new JPanel(new FlowLayout(FlowLayout.LEFT))
         JButton removeBtn = new JButton("選択削除")
@@ -247,6 +265,7 @@ class FileCollectorFrame extends JFrame {
         }
 
         listModel.clear()
+        searchBasePath = Paths.get(targetPathStr)
         isProcessing.set(true)
         searchButton.setEnabled(false)
         log("検索開始: $targetPathStr")
