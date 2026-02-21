@@ -55,10 +55,10 @@ class FileCollectorFrame extends JFrame {
     private final JTextArea logArea = new JTextArea()
     private final DefaultListModel<String> fileListModel = new DefaultListModel<>()
     private final JList<String> fileList = new JList<>(fileListModel)
-    private final JButton searchButton = new JButton("🔍 抽出")
-    private final JButton copyFilesButton = new JButton("📄 ファイル出力")
-    private final JButton fileListButton = new JButton("🌳 treeファイル出力")
-    private final JButton removeSelectedButton = new JButton("🗑️ 選択削除")
+    private final JButton searchButton = new JButton("抽出")
+    private final JButton copyFilesButton = new JButton("ファイル出力")
+    private final JButton fileListButton = new JButton("treeファイル出力")
+    private final JButton removeSelectedButton = new JButton("選択削除")
     private final JCheckBox clearBeforeOutputCheckBox = new JCheckBox("既存ファイル削除", true)
     // 抽出結果のファイル一覧（相対パス表示用の元データ）
     private List<Path> lastFoundFiles = new ArrayList<>()
@@ -66,7 +66,7 @@ class FileCollectorFrame extends JFrame {
     private final List<String> sourceHistory = new ArrayList<>()
 
     FileCollectorFrame() {
-        super("📦 ファイル収集ツール")
+        super("FileCollector")
         // DISPOSE_ON_CLOSE: ウィンドウを閉じても JVM を終了させない（呼び出し元プロセスが終了しない）
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE)
         setSize(800, 600)
@@ -96,13 +96,13 @@ class FileCollectorFrame extends JFrame {
 
         // 対象フォルダ行
         c.gridx = 0; c.gridy = row
-        form.add(new JLabel("📁 対象フォルダ:"), c)
         c.gridx = 1; c.weightx = 1.0
+        form.add(new JLabel("対象フォルダ:"), c)
         sourceDirCombo.setEditable(true)
         sourceDirCombo.setPreferredSize(new Dimension(500, sourceDirCombo.getPreferredSize().height as int))
         form.add(sourceDirCombo, c)
         c.gridx = 2; c.weightx = 0.0
-        def browseSrc = new JButton("📂 参照...")
+        def browseSrc = new JButton("参照...")
         form.add(browseSrc, c)
 
         // tree ファイル出力ボタン行
@@ -117,8 +117,8 @@ class FileCollectorFrame extends JFrame {
         // 抽出条件（glob パターン、1行1パターン）
         row++
         c.gridx = 0; c.gridy = row
-        form.add(new JLabel("🔍 抽出条件 (複数可):"), c)
         c.gridx = 1; c.weightx = 1.0; c.gridwidth = 2
+        form.add(new JLabel("抽出条件(glob, 複数可):"), c)
         def patternScroll = new JScrollPane(patternArea)
         patternArea.lineWrap = true
         patternArea.wrapStyleWord = true
@@ -129,8 +129,8 @@ class FileCollectorFrame extends JFrame {
         // 拡張子追加文字
         row++
         c.gridx = 0; c.gridy = row
-        form.add(new JLabel("✏️ 拡張子追加文字:"), c)
         c.gridx = 1; c.weightx = 1.0; c.gridwidth = 2
+        form.add(new JLabel("拡張子 追加文字:"), c)
         form.add(zipSuffixField, c)
         c.gridwidth = 1
 
@@ -160,7 +160,7 @@ class FileCollectorFrame extends JFrame {
 
         def center = new JPanel(new BorderLayout(4, 4))
         def resultHeader = new JPanel(new BorderLayout())
-        resultHeader.add(new JLabel("📋 抽出結果:"), BorderLayout.WEST)
+        resultHeader.add(new JLabel("抽出結果:"), BorderLayout.WEST)
         resultHeader.add(removeSelectedButton, BorderLayout.EAST)
         center.add(resultHeader, BorderLayout.NORTH)
         center.add(split, BorderLayout.CENTER)
