@@ -471,12 +471,14 @@ class FileCollectorFrame extends JFrame {
         try {
             String baseName = root.getFileName() != null ? root.getFileName().toString() : "filecollector"
             Path outDir = Paths.get(System.getProperty("user.home"), "FileCollector")
-            Files.createDirectories(outDir)
             Path outPath = outDir.resolve(baseName + ".tree.txt")
 
-            if (clearBeforeOutputCheckBox.isSelected()) {
-                Files.deleteIfExists(outPath)
+            if (clearBeforeOutputCheckBox.isSelected() && Files.exists(outDir)) {
+                // 既存ファイル削除 ON のとき、出力先フォルダの中身を全削除
+                Files.walk(outDir).sorted(Comparator.reverseOrder()).forEach { p -> Files.delete(p) }
             }
+            Files.createDirectories(outDir)
+
             def lines = buildTreeLines(root)
             Files.write(outPath, lines, StandardCharsets.UTF_8)
 
