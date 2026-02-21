@@ -120,6 +120,7 @@ class FileCollectorFrame extends JFrame {
         form.add(new JLabel("抽出条件(glob, 複数可):"), c)
         c.gridx = 1; c.weightx = 1.0; c.gridwidth = 2; c.anchor = GridBagConstraints.WEST; c.fill = GridBagConstraints.HORIZONTAL
         def patternScroll = new JScrollPane(patternArea)
+        patternScroll.setMinimumSize(new Dimension(150, 90))
         patternArea.lineWrap = true
         patternArea.wrapStyleWord = true
         patternArea.setFont(sourceDirCombo.getFont())
@@ -153,6 +154,8 @@ class FileCollectorFrame extends JFrame {
         fileList.setVisibleRowCount(8)
         def fileScroll = new JScrollPane(fileList)
         def logScroll = new JScrollPane(logArea)
+        fileScroll.setMinimumSize(new Dimension(100, 80))
+        logScroll.setMinimumSize(new Dimension(100, 80))
 
         def split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, fileScroll, logScroll)
         split.setResizeWeight(0.35d)
