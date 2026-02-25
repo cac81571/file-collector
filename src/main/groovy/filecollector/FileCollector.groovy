@@ -126,21 +126,15 @@ class FileCollectorFrame extends JFrame {
         form.add(patternScroll, c)
         c.gridwidth = 1
 
-        // 拡張子追加文字
+        // 拡張子追加文字 + 抽出ボタン
         row++
         c.gridx = 0; c.gridy = row; c.anchor = GridBagConstraints.EAST; c.fill = GridBagConstraints.NONE
         form.add(new JLabel("拡張子 追加文字:"), c)
-        c.gridx = 1; c.weightx = 1.0; c.gridwidth = 2; c.anchor = GridBagConstraints.WEST; c.fill = GridBagConstraints.HORIZONTAL
+        c.gridx = 1; c.weightx = 0.5; c.gridwidth = 1; c.anchor = GridBagConstraints.WEST; c.fill = GridBagConstraints.HORIZONTAL
         form.add(zipSuffixField, c)
+        c.gridx = 2; c.weightx = 0.5; c.anchor = GridBagConstraints.EAST; c.fill = GridBagConstraints.NONE
+        form.add(searchButton, c)
         c.gridwidth = 1
-
-        // 抽出ボタン行
-        row++
-        c.gridx = 0; c.gridy = row; c.gridwidth = 3
-        c.anchor = GridBagConstraints.EAST
-        def buttonsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT))
-        buttonsPanel.add(searchButton)
-        form.add(buttonsPanel, c)
 
         content.add(form, BorderLayout.NORTH)
 
@@ -160,13 +154,15 @@ class FileCollectorFrame extends JFrame {
 
         def center = new JPanel(new BorderLayout(4, 4))
         def resultHeader = new JPanel(new BorderLayout())
-        resultHeader.add(new JLabel("抽出結果:"), BorderLayout.WEST)
-        def resultButtonsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0))
-        resultButtonsPanel.add(removeSelectedButton)
-        resultButtonsPanel.add(removeExceptSelectedButton)
-        resultButtonsPanel.add(clearBeforeOutputCheckBox)
-        resultButtonsPanel.add(copyFilesButton)
-        resultHeader.add(resultButtonsPanel, BorderLayout.EAST)
+        def leftButtonsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0))
+        leftButtonsPanel.add(new JLabel("抽出結果:"))
+        leftButtonsPanel.add(removeSelectedButton)
+        leftButtonsPanel.add(removeExceptSelectedButton)
+        resultHeader.add(leftButtonsPanel, BorderLayout.WEST)
+        def rightButtonsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0))
+        rightButtonsPanel.add(clearBeforeOutputCheckBox)
+        rightButtonsPanel.add(copyFilesButton)
+        resultHeader.add(rightButtonsPanel, BorderLayout.EAST)
         center.add(resultHeader, BorderLayout.NORTH)
         center.add(split, BorderLayout.CENTER)
 
