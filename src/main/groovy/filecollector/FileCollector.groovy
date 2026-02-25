@@ -57,6 +57,7 @@ class FileCollectorFrame extends JFrame {
     private final JButton copyFilesButton = new JButton("ファイル出力")
     private final JButton fileListButton = new JButton("ファイル tree 出力")
     private final JButton removeSelectedButton = new JButton("選択削除")
+    private final JButton removeExceptSelectedButton = new JButton("選択以外削除")
     private final JCheckBox clearBeforeOutputCheckBox = new JCheckBox("既存ファイル削除", true)
     // 抽出結果のファイル一覧（相対パス表示用の元データ）
     private List<Path> lastFoundFiles = new ArrayList<>()
@@ -162,7 +163,10 @@ class FileCollectorFrame extends JFrame {
         def center = new JPanel(new BorderLayout(4, 4))
         def resultHeader = new JPanel(new BorderLayout())
         resultHeader.add(new JLabel("抽出結果:"), BorderLayout.WEST)
-        resultHeader.add(removeSelectedButton, BorderLayout.EAST)
+        def resultButtonsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0))
+        resultButtonsPanel.add(removeSelectedButton)
+        resultButtonsPanel.add(removeExceptSelectedButton)
+        resultHeader.add(resultButtonsPanel, BorderLayout.EAST)
         center.add(resultHeader, BorderLayout.NORTH)
         center.add(split, BorderLayout.CENTER)
 
@@ -171,10 +175,13 @@ class FileCollectorFrame extends JFrame {
         browseSrc.addActionListener { chooseSourceDir() }
         copyFilesButton.enabled = false
         removeSelectedButton.enabled = false
-        // リストで選択があるときのみ「選択削除」を有効化
+        removeExceptSelectedButton.enabled = false
+        // リストで選択があるときのみ「選択削除」「選択以外削除」を有効化
         fileList.addListSelectionListener {
             if (!it.valueIsAdjusting) {
-                removeSelectedButton.enabled = fileList.selectedIndices.length > 0
+                def hasSelection = fileList.selectedIndices.length > 0
+                removeSelectedButton.enabled = hasSelection
+                removeExceptSelectedButton.enabled = hasSelection
             }
         }
 
@@ -189,6 +196,7 @@ class FileCollectorFrame extends JFrame {
         copyFilesButton.addActionListener { doCopyFiles() }
         fileListButton.addActionListener { doFileListOutput() }
         removeSelectedButton.addActionListener { removeSelectedFromResult() }
+        removeExceptSelectedButton.addActionListener { removeExceptSelectedFromResult() }
     }
 
     /** 抽出結果リストで選択した行を削除 */
@@ -204,6 +212,25 @@ class FileCollectorFrame extends JFrame {
         }
         copyFilesButton.enabled = !lastFoundFiles.isEmpty()
         appendLog("選択した ${indices.length} 件を抽出結果から削除しました。")
+    }
+
+    /** 抽出結果リストで選択した行以外を削除（選択行のみ残す） */
+    private void removeExceptSelectedFromResult() {
+        int[] indices = fileList.selectedIndices
+        if (indices == null || indices.length == 0) return
+        def selectedIndicesList = indices.toList().sort()
+        def newModelItems = selectedIndicesList.collect { int idx ->
+            idx < fileListModel.size() ? fileListModel.get(idx) : null
+        }.findAll { it != null }
+        def newPaths = selectedIndicesList.collect { int idx ->
+            idx < lastFoundFiles.size() ? lastFoundFiles.get(idx) : null
+        }.findAll { it != null }
+        fileListModel.clear()
+        newModelItems.each { fileListModel.addElement(it) }
+        lastFoundFiles.clear()
+        lastFoundFiles.addAll(newPaths)
+        copyFilesButton.enabled = !lastFoundFiles.isEmpty()
+        appendLog("選択以外を削除しました。${newModelItems.size()} 件を残しました。")
     }
 
     /** フォルダ選択ダイアログを開き、選択したパスをコンボに設定 */
