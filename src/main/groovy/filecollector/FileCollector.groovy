@@ -134,14 +134,12 @@ class FileCollectorFrame extends JFrame {
         form.add(zipSuffixField, c)
         c.gridwidth = 1
 
-        // 抽出・ファイル出力・既存削除ボタン行
+        // 抽出ボタン行
         row++
         c.gridx = 0; c.gridy = row; c.gridwidth = 3
         c.anchor = GridBagConstraints.EAST
         def buttonsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT))
         buttonsPanel.add(searchButton)
-        buttonsPanel.add(copyFilesButton)
-        buttonsPanel.add(clearBeforeOutputCheckBox)
         form.add(buttonsPanel, c)
 
         content.add(form, BorderLayout.NORTH)
@@ -166,6 +164,8 @@ class FileCollectorFrame extends JFrame {
         def resultButtonsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0))
         resultButtonsPanel.add(removeSelectedButton)
         resultButtonsPanel.add(removeExceptSelectedButton)
+        resultButtonsPanel.add(clearBeforeOutputCheckBox)
+        resultButtonsPanel.add(copyFilesButton)
         resultHeader.add(resultButtonsPanel, BorderLayout.EAST)
         center.add(resultHeader, BorderLayout.NORTH)
         center.add(split, BorderLayout.CENTER)
