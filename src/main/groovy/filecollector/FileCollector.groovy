@@ -132,7 +132,7 @@ class FileCollectorFrame extends JFrame {
         form.add(new JLabel("拡張子 追加文字:"), c)
         c.gridx = 1; c.weightx = 0.5; c.gridwidth = 1; c.anchor = GridBagConstraints.WEST; c.fill = GridBagConstraints.HORIZONTAL
         form.add(zipSuffixField, c)
-        c.gridx = 2; c.weightx = 0.5; c.anchor = GridBagConstraints.EAST; c.fill = GridBagConstraints.NONE
+        c.gridx = 2; c.weightx = 0.5; c.anchor = GridBagConstraints.CENTER; c.fill = GridBagConstraints.HORIZONTAL
         form.add(searchButton, c)
         c.gridwidth = 1
 
