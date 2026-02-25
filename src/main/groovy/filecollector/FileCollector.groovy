@@ -346,10 +346,10 @@ class FileCollectorFrame extends JFrame {
                     appendLog("対象ファイルが見つかりませんでした。")
                 }
             } catch (Exception e) {
-                appendLog("エラー: ${e.message}")
+                appendLog("エラー: ${getErrorMessage(e)}")
                 e.printStackTrace()
                 SwingUtilities.invokeLater {
-                    JOptionPane.showMessageDialog(this, "エラー: ${e.message}", "エラー", JOptionPane.ERROR_MESSAGE)
+                    JOptionPane.showMessageDialog(this, "エラー: ${getErrorMessage(e)}", "エラー", JOptionPane.ERROR_MESSAGE)
                 }
             } finally {
                 SwingUtilities.invokeLater {
@@ -394,10 +394,10 @@ class FileCollectorFrame extends JFrame {
             Desktop.getDesktop().open(outDir.toFile())
             appendLog("出力フォルダをエクスプローラで表示しました。")
         } catch (Exception e) {
-            appendLog("各ファイル出力中にエラー: ${e.message}")
+            appendLog("各ファイル出力中にエラー: ${getErrorMessage(e)}")
             e.printStackTrace()
             SwingUtilities.invokeLater {
-                JOptionPane.showMessageDialog(this, "各ファイル出力中にエラー: ${e.message}", "エラー", JOptionPane.ERROR_MESSAGE)
+                JOptionPane.showMessageDialog(this, "各ファイル出力中にエラー: ${getErrorMessage(e)}", "エラー", JOptionPane.ERROR_MESSAGE)
             }
         }
     }
@@ -508,10 +508,10 @@ class FileCollectorFrame extends JFrame {
             Desktop.getDesktop().open(outDir.toFile())
             appendLog("出力フォルダをエクスプローラで表示しました。")
         } catch (Exception e) {
-            appendLog("ファイル tree 出力中にエラー: ${e.message}")
+            appendLog("ファイル tree 出力中にエラー: ${getErrorMessage(e)}")
             e.printStackTrace()
             SwingUtilities.invokeLater {
-                JOptionPane.showMessageDialog(this, "ファイル tree 出力中にエラー: ${e.message}", "エラー", JOptionPane.ERROR_MESSAGE)
+                JOptionPane.showMessageDialog(this, "ファイル tree 出力中にエラー: ${getErrorMessage(e)}", "エラー", JOptionPane.ERROR_MESSAGE)
             }
         }
     }
@@ -545,6 +545,19 @@ class FileCollectorFrame extends JFrame {
             logArea.append(msg + System.lineSeparator())
             logArea.caretPosition = logArea.document.length
         }
+    }
+
+    /** 例外から表示用メッセージを取得（message が null の場合は cause をたどってメッセージを探す） */
+    private static String getErrorMessage(Throwable t) {
+        if (t == null) return "不明なエラー"
+        def current = t
+        while (current != null) {
+            if (current.message != null && !current.message.isEmpty()) {
+                return current.message
+            }
+            current = current.cause
+        }
+        return t.getClass()?.simpleName ?: "不明なエラー"
     }
 
     /** エラーダイアログを表示 */
