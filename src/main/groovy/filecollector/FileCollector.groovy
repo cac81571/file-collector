@@ -18,7 +18,11 @@ import java.util.ArrayList
 import java.util.HashMap
 import java.util.Map
 import java.util.Comparator
+import java.util.HashSet
 import java.nio.file.*
+import java.security.MessageDigest
+import java.awt.event.WindowAdapter
+import java.awt.event.WindowEvent
 
 class FileCollector {
 
@@ -41,6 +45,7 @@ class FileCollectorFrame extends JFrame {
     private final DefaultListModel<String> fileListModel = new DefaultListModel<>()
     private final JList<String> fileList = new JList<>(fileListModel)
     private final JButton searchButton = new JButton("抽出")
+    private final JComboBox<String> outputCountCombo = new JComboBox<>(["5", "10", "20", "50", "100"] as String[])
     private final JButton copyFilesButton = new JButton("ファイル出力")
     private final JButton fileListButton = new JButton("tree 出力")
     private final JButton removeSelectedButton = new JButton("選択削除")
@@ -48,8 +53,20 @@ class FileCollectorFrame extends JFrame {
     private final JCheckBox clearBeforeOutputCheckBox = new JCheckBox("既存ファイル削除", true)
     // 抽出結果のファイル一覧（相対パス表示用の元データ）
     private List<Path> lastFoundFiles = new ArrayList<>()
-    // 対象フォルダの履歴（~/.filecollector-history.txt に保存）
+    // 対象フォルダの履歴（CONFIG_DIR/history.txt に保存）
     private final List<String> sourceHistory = new ArrayList<>()
+    // 設定・キャッシュ用ディレクトリ（ユーザホーム直下のツール専用フォルダ）
+    private static final Path CONFIG_DIR = Paths.get(System.getProperty("user.home"), ".filecollector")
+    // ファイル一覧キャッシュ・履歴・出力件数などは CONFIG_DIR 配下に配置
+    private static final Path FILELIST_CACHE_DIR = CONFIG_DIR
+    // ファイル出力（コピー）の出力先（CONFIG_DIR 配下）
+    private static final Path FILE_OUTPUT_DIR = CONFIG_DIR.resolve("FileCollector")
+    // tree 出力の出力先（CONFIG_DIR 配下）
+    private static final Path TREE_OUTPUT_DIR = CONFIG_DIR.resolve("FileCollectorTree")
+    // 1回あたりの出力件数設定を保存するファイル（CONFIG_DIR 配下）
+    private static final Path OUTPUT_COUNT_FILE = CONFIG_DIR.resolve("output-count.txt")
+    // 対象フォルダ履歴を保存するファイル（CONFIG_DIR 配下）
+    private static final Path SOURCE_HISTORY_FILE = CONFIG_DIR.resolve("history.txt")
 
     FileCollectorFrame() {
         super("FileCollector")
@@ -60,7 +77,14 @@ class FileCollectorFrame extends JFrame {
 
         initLayout()
         loadSourceHistory()
+        loadOutputCount()
         initActions()
+        addWindowListener(new WindowAdapter() {
+            @Override
+            void windowClosing(WindowEvent e) {
+                addSourceHistory(getSourceDirText())
+            }
+        })
     }
 
     /** レイアウト構築。上段フォーム + 中央（結果リスト + ログ） */
@@ -135,7 +159,11 @@ class FileCollectorFrame extends JFrame {
         leftButtonsPanel.add(removeExceptSelectedButton)
         resultHeader.add(leftButtonsPanel, BorderLayout.WEST)
         def rightButtonsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0))
-        rightButtonsPanel.add(clearBeforeOutputCheckBox)
+        rightButtonsPanel.add(new JLabel("1回あたり:"))
+        outputCountCombo.setEditable(true)
+        outputCountCombo.setPreferredSize(new Dimension(55, outputCountCombo.getPreferredSize().height as int))
+        rightButtonsPanel.add(outputCountCombo)
+        rightButtonsPanel.add(new JLabel("件"))
         rightButtonsPanel.add(copyFilesButton)
         resultHeader.add(rightButtonsPanel, BorderLayout.EAST)
         center.add(resultHeader, BorderLayout.NORTH)
@@ -162,6 +190,7 @@ class FileCollectorFrame extends JFrame {
 
     /** 各ボタンのアクションリスナーを登録 */
     private void initActions() {
+        outputCountCombo.addActionListener { saveOutputCount() }
         searchButton.addActionListener { doSearch() }
         copyFilesButton.addActionListener { doCopyFiles() }
         fileListButton.addActionListener { doFileListOutput() }
@@ -226,12 +255,11 @@ class FileCollectorFrame extends JFrame {
         return item?.toString()
     }
 
-    /** ~/.filecollector-history.txt から対象フォルダ履歴を読み込み */
+    /** CONFIG_DIR/history.txt から対象フォルダ履歴を読み込み */
     private void loadSourceHistory() {
         try {
-            Path histPath = Paths.get(System.getProperty("user.home"), ".filecollector-history.txt")
-            if (Files.exists(histPath)) {
-                Files.readAllLines(histPath, StandardCharsets.UTF_8).each { line ->
+            if (Files.exists(SOURCE_HISTORY_FILE)) {
+                Files.readAllLines(SOURCE_HISTORY_FILE, StandardCharsets.UTF_8).each { line ->
                     def v = line.trim()
                     if (v && !sourceHistory.contains(v)) {
                         sourceHistory.add(v)
@@ -243,20 +271,55 @@ class FileCollectorFrame extends JFrame {
         }
     }
 
-    /** 対象フォルダ履歴を ~/.filecollector-history.txt に保存 */
+    /** CONFIG_DIR/output-count.txt から1回あたりの出力件数を読み込み */
+    private void loadOutputCount() {
+        try {
+            if (Files.exists(OUTPUT_COUNT_FILE)) {
+                def line = Files.readAllLines(OUTPUT_COUNT_FILE, StandardCharsets.UTF_8).find { it != null }?.trim()
+                if (line != null && !line.isEmpty()) {
+                    outputCountCombo.setSelectedItem(line)
+                    return
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        outputCountCombo.setSelectedItem("10")
+    }
+
+    /** 1回あたりの出力件数を CONFIG_DIR/output-count.txt に保存 */
+    private void saveOutputCount() {
+        try {
+            def v = getOutputCountValue()
+            if (v != null && !v.isEmpty()) {
+                Files.createDirectories(CONFIG_DIR)
+                Files.write(OUTPUT_COUNT_FILE, [v], StandardCharsets.UTF_8)
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** コンボから出力件数（文字列）を取得。未入力・不正時は "10" */
+    private String getOutputCountValue() {
+        def item = outputCountCombo.editable ? outputCountCombo.editor?.item?.toString() : outputCountCombo.selectedItem?.toString()
+        return item?.trim() ?: "10"
+    }
+
+    /** 1回あたりの出力件数を取得（1以上） */
+    private int getOutputCount() {
+        try {
+            def n = Integer.parseInt(getOutputCountValue())
+            return n >= 1 ? n : 10
+        } catch (NumberFormatException e) {
+            return 10
+        }
+    }
+
+    /** 対象フォルダ履歴を CONFIG_DIR/history.txt に保存 */
     private void saveSourceHistory() {
         try {
-            Path histPath = Paths.get(System.getProperty("user.home"), ".filecollector-history.txt")
-            Files.createDirectories(histPath.parent)
-            BufferedWriter w = Files.newBufferedWriter(histPath, StandardCharsets.UTF_8)
-            try {
-                sourceHistory.each { v ->
-                    w.write(v)
-                    w.newLine()
-                }
-            } finally {
-                w.close()
-            }
+            Files.createDirectories(CONFIG_DIR)
+            Files.write(SOURCE_HISTORY_FILE, sourceHistory, StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)
         } catch (Exception ignored) {
         }
     }
@@ -304,18 +367,19 @@ class FileCollectorFrame extends JFrame {
         // 重い走査は別スレッドで実行（UI フリーズ防止）
         new Thread({
             try {
-                def jarFiles = findFiles(srcDir, cleaned)
-                lastFoundFiles = jarFiles
+                ensureFileListCache(srcDir, false)  // キャッシュが無いときだけファイル一覧を作成
+                def jarFiles = findFilesFromFileList(srcDir, cleaned)
+                def existingSet = new HashSet<Path>(lastFoundFiles)
+                def toAdd = jarFiles.findAll { !existingSet.contains(it) }
 
                 SwingUtilities.invokeLater {
-                    fileListModel.clear()
-                    jarFiles.each { p ->
+                    toAdd.each { p ->
+                        lastFoundFiles.add(p)
                         fileListModel.addElement(srcDir.relativize(p).toString())
                     }
                 }
 
-                appendLog("見つかったファイル数: ${jarFiles.size()}")
-
+                appendLog("見つかったファイル数: ${jarFiles.size()}、うち新規 ${toAdd.size()} 件を追加（同一ファイルは追加しない）")
                 if (jarFiles.isEmpty()) {
                     appendLog("対象ファイルが見つかりませんでした。")
                 }
@@ -334,7 +398,7 @@ class FileCollectorFrame extends JFrame {
         }, "FileCollectorWorker").start()
     }
 
-    /** 抽出結果のファイルを user.home/FileCollector/ にコピーし、フォルダを開く */
+    /** 抽出結果のファイルを FILE_OUTPUT_DIR にコピーし、フォルダを開く */
     private void doCopyFiles() {
         if (lastFoundFiles == null || lastFoundFiles.isEmpty()) {
             showError("まず抽出を行い、ファイル一覧を取得してください。")
@@ -348,15 +412,19 @@ class FileCollectorFrame extends JFrame {
         Path baseDir = Paths.get(src)
         String baseName = baseDir.getFileName() != null ? baseDir.getFileName().toString() : "filecollector"
         String suffix = zipSuffixField.text?.trim() ?: ""
-        Path outDir = Paths.get(System.getProperty("user.home"), "FileCollector")
+        Path outDir = FILE_OUTPUT_DIR
         try {
             if (clearBeforeOutputCheckBox.isSelected() && Files.exists(outDir)) {
-                // 既存ファイル削除 ON のとき、出力先フォルダの中身を全削除
+                // 既存ファイル削除 ON のとき、ファイル出力先フォルダの中身を全削除
                 Files.walk(outDir).sorted(Comparator.reverseOrder()).forEach { p -> Files.delete(p) }
             }
             Files.createDirectories(outDir)
+            int limit = getOutputCount()
+            int toCopy = Math.min(limit, lastFoundFiles.size())
+            if (toCopy <= 0) return
             Map<String, Integer> nameCount = new HashMap<>()
-            lastFoundFiles.each { Path file ->
+            toCopy.times { int i ->
+                Path file = lastFoundFiles.get(i)
                 String baseFileName = file.fileName.toString()
                 String nameWithSuffix = fileNameWithSuffix(baseFileName, suffix)
                 String destName = uniqueFlatName(nameWithSuffix, nameCount)
@@ -364,9 +432,12 @@ class FileCollectorFrame extends JFrame {
                 Files.copy(file, dest, StandardCopyOption.REPLACE_EXISTING)
                 appendLog("コピー: $destName")
             }
-            appendLog("各ファイルを ${outDir} に出力しました。")
+            appendLog("${toCopy} 件を ${outDir} に出力しました。")
             Desktop.getDesktop().open(outDir.toFile())
             appendLog("出力フォルダをエクスプローラで表示しました。")
+            // 出力したファイルをリストから削除
+            toCopy.times { fileListModel.remove(0); lastFoundFiles.remove(0) }
+            copyFilesButton.enabled = !lastFoundFiles.isEmpty()
         } catch (Exception e) {
             appendLog("各ファイル出力中にエラー: ${getErrorMessage(e)}")
             e.printStackTrace()
@@ -396,7 +467,72 @@ class FileCollectorFrame extends JFrame {
         return s.isEmpty() ? "" : "**" + s    // 部分一致相当のため先頭に ** 付与
     }
 
-    /** root 以下を再帰走査し、glob パターン（正規化済み）にマッチする通常ファイルを返す */
+    /** フォルダパスからファイル一覧キャッシュ用の安定したハッシュ文字列を生成 */
+    private static String pathToFileListHash(Path root) {
+        def s = root.toAbsolutePath().normalize().toString().replace("\\", "/")
+        def digest = MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8))
+        return digest[0..7].collect { String.format("%02x", it) }.join("")
+    }
+
+    /** 対象フォルダ用のファイル一覧キャッシュファイルの Path を返す（CONFIG_DIR/{hash}.filelist.txt） */
+    private static Path getFileListCachePath(Path root) {
+        Files.createDirectories(FILELIST_CACHE_DIR)
+        return FILELIST_CACHE_DIR.resolve(pathToFileListHash(root) + ".filelist.txt")
+    }
+
+    /** root 以下を再帰走査し、全通常ファイルの絶対パスをキャッシュファイルに書き出す */
+    private void buildAndWriteFileList(Path root) {
+        Path cachePath = getFileListCachePath(root)
+        def lines = new ArrayList<String>()
+        Files.walk(root).forEach { Path p ->
+            if (Files.isRegularFile(p)) {
+                lines.add(p.toAbsolutePath().normalize().toString())
+            }
+        }
+        Files.write(cachePath, lines, StandardCharsets.UTF_8)
+    }
+
+    /**
+     * ファイル一覧キャッシュを用意する。
+     * @param forceRebuild true のときは既存キャッシュを削除してから作成。false のときは存在しない場合のみ作成。
+     */
+    private void ensureFileListCache(Path root, boolean forceRebuild) {
+        Path cachePath = getFileListCachePath(root)
+        if (forceRebuild && Files.exists(cachePath)) {
+            Files.delete(cachePath)
+        }
+        if (!Files.exists(cachePath)) {
+            buildAndWriteFileList(root)
+        }
+    }
+
+    /** ファイル一覧キャッシュを読み、glob パターンにマッチするファイルのみ返す（findFiles のキャッシュ版） */
+    private List<Path> findFilesFromFileList(Path root, List<String> patterns) {
+        Path cachePath = getFileListCachePath(root)
+        if (!Files.exists(cachePath)) {
+            return findFiles(root, patterns)
+        }
+        def globPatterns = patterns.collect { toGlobPattern(it) }.findAll { it }
+        def matchers = globPatterns.collect { pattern ->
+            FileSystems.default.getPathMatcher("glob:${pattern}")
+        }
+        def result = []
+        Files.readAllLines(cachePath, StandardCharsets.UTF_8).each { String line ->
+            if (!line.trim()) return
+            Path p = Paths.get(line)
+            if (!Files.isRegularFile(p)) return
+            Path rel = root.relativize(p)
+            def segs = normalizePath(rel.toString()).split("/").toList()
+            Path relNormalized = segs ? rel.getFileSystem().getPath(*segs) : rel
+            if (matchers.any { it.matches(relNormalized) || it.matches(p.fileName) }) {
+                result << p
+                appendLog("追加: ${rel}")
+            }
+        }
+        return result
+    }
+
+    /** root 以下を再帰走査し、glob パターン（正規化済み）にマッチする通常ファイルを返す（キャッシュ未使用） */
     private List<Path> findFiles(Path root, List<String> patterns) {
         def globPatterns = patterns.collect { toGlobPattern(it) }.findAll { it }
         def matchers = globPatterns.collect { pattern ->
@@ -448,7 +584,7 @@ class FileCollectorFrame extends JFrame {
         }
     }
 
-    /** 対象フォルダの tree を user.home/FileCollector/<フォルダ名>.tree.txt に出力し、フォルダを開く */
+    /** 対象フォルダの tree を TREE_OUTPUT_DIR/<フォルダ名>.tree.txt に出力し、フォルダを開く */
     private void doFileListOutput() {
         def src = getSourceDirText()?.trim()
         if (!src) {
@@ -464,12 +600,14 @@ class FileCollectorFrame extends JFrame {
 
         appendLog("ファイル tree 出力開始: $root")
         try {
+            ensureFileListCache(root, true)  // ファイル一覧キャッシュを削除してから再作成
+
             String baseName = root.getFileName() != null ? root.getFileName().toString() : "filecollector"
-            Path outDir = Paths.get(System.getProperty("user.home"), "FileCollector")
+            Path outDir = TREE_OUTPUT_DIR
             Path outPath = outDir.resolve(baseName + ".tree.txt")
 
             if (clearBeforeOutputCheckBox.isSelected() && Files.exists(outDir)) {
-                // 既存ファイル削除 ON のとき、出力先フォルダの中身を全削除
+                // 既存ファイル削除 ON のとき、tree 出力先フォルダの中身を全削除
                 Files.walk(outDir).sorted(Comparator.reverseOrder()).forEach { p -> Files.delete(p) }
             }
             Files.createDirectories(outDir)
