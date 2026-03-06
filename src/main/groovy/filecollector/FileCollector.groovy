@@ -119,7 +119,7 @@ class FileCollectorFrame extends JFrame {
         // 抽出条件（glob パターン、1行1パターン）
         row++
         c.gridx = 0; c.gridy = row; c.anchor = GridBagConstraints.EAST; c.fill = GridBagConstraints.NONE
-        form.add(new JLabel("抽出条件(glob, 複数可):"), c)
+        form.add(new JLabel("抽出条件:"), c)
         c.gridx = 1; c.weightx = 1.0; c.gridwidth = 2; c.anchor = GridBagConstraints.WEST; c.fill = GridBagConstraints.HORIZONTAL
         def patternScroll = new JScrollPane(patternArea)
         patternScroll.setMinimumSize(new Dimension(150, 90))
@@ -131,7 +131,7 @@ class FileCollectorFrame extends JFrame {
         // 拡張子追加文字 + 抽出ボタン
         row++
         c.gridx = 0; c.gridy = row; c.anchor = GridBagConstraints.EAST; c.fill = GridBagConstraints.NONE
-        form.add(new JLabel("拡張子 追加文字:"), c)
+        form.add(new JLabel("末尾追加文字:"), c)
         c.gridx = 1; c.weightx = 0.5; c.gridwidth = 1; c.anchor = GridBagConstraints.WEST; c.fill = GridBagConstraints.HORIZONTAL
         form.add(zipSuffixField, c)
         c.gridx = 2; c.weightx = 0.5; c.anchor = GridBagConstraints.CENTER; c.fill = GridBagConstraints.HORIZONTAL
