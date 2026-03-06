@@ -70,8 +70,10 @@ class FileCollectorFrame extends JFrame {
 
     FileCollectorFrame() {
         super("FileCollector")
-        // DISPOSE_ON_CLOSE: ウィンドウを閉じても JVM を終了させない（呼び出し元プロセスが終了しない）
-        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE)
+        // 実行モード判定 (JAR vs IDE): JAR のときは EXIT_ON_CLOSE、IDE のときは DISPOSE_ON_CLOSE
+        def resourceUrl = FileCollectorFrame.class.getResource(FileCollectorFrame.class.simpleName + ".class")
+        boolean isJarExecution = resourceUrl != null && resourceUrl.toString().startsWith("jar:")
+        setDefaultCloseOperation(isJarExecution ? JFrame.EXIT_ON_CLOSE : JFrame.DISPOSE_ON_CLOSE)
         setSize(800, 600)
         setLocationRelativeTo(null)
 
