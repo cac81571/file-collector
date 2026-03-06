@@ -42,7 +42,7 @@ class FileCollectorFrame extends JFrame {
     private final JList<String> fileList = new JList<>(fileListModel)
     private final JButton searchButton = new JButton("抽出")
     private final JButton copyFilesButton = new JButton("ファイル出力")
-    private final JButton fileListButton = new JButton("ファイル tree 出力")
+    private final JButton fileListButton = new JButton("tree 出力")
     private final JButton removeSelectedButton = new JButton("選択削除")
     private final JButton removeExceptSelectedButton = new JButton("選択以外削除")
     private final JCheckBox clearBeforeOutputCheckBox = new JCheckBox("既存ファイル削除", true)
@@ -88,17 +88,7 @@ class FileCollectorFrame extends JFrame {
         sourceDirCombo.setPreferredSize(new Dimension(500, sourceDirCombo.getPreferredSize().height as int))
         form.add(sourceDirCombo, c)
         c.gridx = 2; c.weightx = 0.0
-        def browseSrc = new JButton("参照...")
-        form.add(browseSrc, c)
-
-        // tree ファイル出力ボタン行
-        row++
-        c.gridx = 0; c.gridy = row; c.gridwidth = 3
-        c.anchor = GridBagConstraints.EAST
-        def treePanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0))
-        treePanel.add(fileListButton)
-        form.add(treePanel, c)
-        c.gridwidth = 1
+        form.add(fileListButton, c)
 
         // 抽出条件（glob パターン、1行1パターン）
         row++
@@ -153,7 +143,6 @@ class FileCollectorFrame extends JFrame {
 
         content.add(center, BorderLayout.CENTER)
 
-        browseSrc.addActionListener { chooseSourceDir() }
         copyFilesButton.enabled = false
         removeSelectedButton.enabled = false
         removeExceptSelectedButton.enabled = false
