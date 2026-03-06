@@ -25,21 +25,8 @@ class FileCollector {
     static void main(String[] args) {
         // UI スレッドでフレームを起動
         SwingUtilities.invokeLater {
-            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName())
-            def defaults = UIManager.getLookAndFeelDefaults()
-            setUIFontScaleSize(defaults, "Yu Gothic UI", 1.0f)
+            UIManager.setLookAndFeel("javax.swing.plaf.nimbus.NimbusLookAndFeel")
             new FileCollectorFrame().setVisible(true)
-        }
-    }
-
-    /** すべての UI フォントを変更して一括で一回り大きくする（pointDelta: 増やすポイント数） */
-    static void setUIFontScaleSize(def defaults, String fontName, float pointDelta) {
-        defaults.keySet().findAll { it.toString().endsWith(".font") }.each { key ->
-            def value = defaults.get(key)
-            if (value instanceof Font) {
-                def baseFont = new Font(fontName, value.style as int, value.size as int)
-                UIManager.put(key, baseFont.deriveFont((value.size + pointDelta) as float))
-            }
         }
     }
 }
@@ -122,7 +109,6 @@ class FileCollectorFrame extends JFrame {
         patternScroll.setMinimumSize(new Dimension(150, 90))
         patternArea.lineWrap = true
         patternArea.wrapStyleWord = true
-        patternArea.setFont(sourceDirCombo.getFont())
         form.add(patternScroll, c)
         c.gridwidth = 1
 
@@ -140,7 +126,6 @@ class FileCollectorFrame extends JFrame {
 
         // 中央エリア：抽出結果リスト + ログ
         logArea.setEditable(false)
-        logArea.setFont(sourceDirCombo.getFont())
 
         fileList.setVisibleRowCount(8)
         def fileScroll = new JScrollPane(fileList)
