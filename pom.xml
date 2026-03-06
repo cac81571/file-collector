@@ -24,6 +24,12 @@
             <artifactId>groovy</artifactId>
             <version>${groovy.version}</version>
         </dependency>
+        <!-- FlatLaf: モダンな Swing Look and Feel -->
+        <dependency>
+            <groupId>com.formdev</groupId>
+            <artifactId>flatlaf</artifactId>
+            <version>3.4.1</version>
+        </dependency>
     </dependencies>
 
     <build>

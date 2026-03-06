@@ -23,13 +23,14 @@ import java.nio.file.*
 import java.security.MessageDigest
 import java.awt.event.WindowAdapter
 import java.awt.event.WindowEvent
+import com.formdev.flatlaf.FlatLightLaf
 
 class FileCollector {
 
     static void main(String[] args) {
         // UI スレッドでフレームを起動
         SwingUtilities.invokeLater {
-            UIManager.setLookAndFeel("javax.swing.plaf.nimbus.NimbusLookAndFeel")
+            FlatLightLaf.setup()
             new FileCollectorFrame().setVisible(true)
         }
     }
