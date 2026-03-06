@@ -4,25 +4,20 @@
  */
 package filecollector
 
-import javax.swing.*
-import javax.swing.border.EmptyBorder
 import java.awt.*
-import java.io.ByteArrayOutputStream
-import java.io.File
-import java.io.BufferedWriter
-import java.nio.charset.StandardCharsets
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-import java.util.List
-import java.util.ArrayList
-import java.util.HashMap
-import java.util.Map
-import java.util.Comparator
-import java.util.HashSet
-import java.nio.file.*
-import java.security.MessageDigest
+import java.awt.event.MouseAdapter
+import java.awt.event.MouseEvent
 import java.awt.event.WindowAdapter
 import java.awt.event.WindowEvent
+import java.nio.charset.StandardCharsets
+import java.nio.file.*
+import java.security.MessageDigest
+import java.util.List
+
+import javax.swing.*
+import javax.swing.border.EmptyBorder
+
+import com.formdev.flatlaf.FlatClientProperties
 import com.formdev.flatlaf.FlatLightLaf
 
 class FileCollector {
@@ -109,7 +104,7 @@ class FileCollectorFrame extends JFrame {
 
         // 対象フォルダ行
         c.gridx = 0; c.gridy = row; c.anchor = GridBagConstraints.EAST; c.fill = GridBagConstraints.NONE
-        form.add(new JLabel("対象フォルダ:"), c)
+        form.add(new JLabel("対象フォルダ"), c)
         c.gridx = 1; c.weightx = 1.0; c.anchor = GridBagConstraints.WEST; c.fill = GridBagConstraints.HORIZONTAL
         sourceDirCombo.setEditable(true)
         sourceDirCombo.setPreferredSize(new Dimension(500, sourceDirCombo.getPreferredSize().height as int))
@@ -120,7 +115,49 @@ class FileCollectorFrame extends JFrame {
         // 抽出条件（glob パターン、1行1パターン）
         row++
         c.gridx = 0; c.gridy = row; c.anchor = GridBagConstraints.EAST; c.fill = GridBagConstraints.NONE
-        form.add(new JLabel("抽出条件:"), c)
+        def patternLabelPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0))
+        def patternLabel = new JLabel("抽出条件")
+        // FlatLaf HelpButton（色は main で UIManager の HelpButton.background / questionMarkColor を設定）
+        def helpIconButton = new JButton()
+        helpIconButton.putClientProperty(FlatClientProperties.BUTTON_TYPE, FlatClientProperties.BUTTON_TYPE_HELP)
+        helpIconButton.setFocusable(false)
+        helpIconButton.setPreferredSize(new Dimension(22, 22))
+        helpIconButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR))
+        helpIconButton.setToolTipText("抽出条件（glob パターン）の説明を表示")
+        helpIconButton.addMouseListener(new MouseAdapter() {
+            @Override
+            void mouseClicked(MouseEvent e) {
+                String msg = """\
+抽出条件（glob パターン）の例:
+
+- glob 特殊記号
+  *   : 任意の文字列（/ を含まない）
+  **  : 任意の階層・任意の文字列
+  ?   : 任意の 1 文字
+
+- 特別仕様（このツール固有の仕様）
+  入力パターンの先頭に ** が自動付与される
+
+- 拡張子で指定
+  *.java → ***.java  : サブフォルダも含めた .java 全て
+  *Action.java → ***Action.java  : サブフォルダも含めた *Action.java 全て
+
+- パスの一部で指定
+  src/**/Test*.java → **src/**/Test*.java : パスに src を含む Test で始まる .java
+
+- 「...」は UI 上の簡易記法です
+  /.../ や ... は内部的に ** に変換されます。
+  例) src/.../Test.java  → src/**/Test.java
+
+複数条件を書く場合は、1 行につき 1 パターン入力してください。
+""".stripIndent()
+                JOptionPane.showMessageDialog(FileCollectorFrame.this, msg, "抽出条件の説明", JOptionPane.INFORMATION_MESSAGE)
+            }
+        })
+        patternLabelPanel.add(patternLabel)
+        patternLabelPanel.add(Box.createHorizontalStrut(4))
+        patternLabelPanel.add(helpIconButton)
+        form.add(patternLabelPanel, c)
         c.gridx = 1; c.weightx = 1.0; c.gridwidth = 2; c.anchor = GridBagConstraints.WEST; c.fill = GridBagConstraints.HORIZONTAL
         def patternScroll = new JScrollPane(patternArea)
         patternScroll.setMinimumSize(new Dimension(150, 90))
@@ -132,7 +169,7 @@ class FileCollectorFrame extends JFrame {
         // 拡張子追加文字 + 抽出ボタン
         row++
         c.gridx = 0; c.gridy = row; c.anchor = GridBagConstraints.EAST; c.fill = GridBagConstraints.NONE
-        form.add(new JLabel("末尾追加文字:"), c)
+        form.add(new JLabel("末尾追加文字"), c)
         c.gridx = 1; c.weightx = 0.5; c.gridwidth = 1; c.anchor = GridBagConstraints.WEST; c.fill = GridBagConstraints.HORIZONTAL
         form.add(zipSuffixField, c)
         c.gridx = 2; c.weightx = 0.5; c.anchor = GridBagConstraints.CENTER; c.fill = GridBagConstraints.HORIZONTAL
@@ -157,12 +194,12 @@ class FileCollectorFrame extends JFrame {
         def center = new JPanel(new BorderLayout(4, 4))
         def resultHeader = new JPanel(new BorderLayout())
         def leftButtonsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0))
-        leftButtonsPanel.add(new JLabel("抽出結果:"))
+        leftButtonsPanel.add(new JLabel("抽出結果"))
         leftButtonsPanel.add(removeSelectedButton)
         leftButtonsPanel.add(removeExceptSelectedButton)
         resultHeader.add(leftButtonsPanel, BorderLayout.WEST)
         def rightButtonsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0))
-        rightButtonsPanel.add(new JLabel("1回あたり:"))
+        rightButtonsPanel.add(new JLabel("1回あたり"))
         outputCountCombo.setEditable(true)
         outputCountCombo.setPreferredSize(new Dimension(55, outputCountCombo.getPreferredSize().height as int))
         rightButtonsPanel.add(outputCountCombo)
