@@ -295,13 +295,23 @@ class FileCollectorFrame extends JFrame {
         return item?.toString()
     }
 
-    /** CONFIG_DIR/history.txt から対象フォルダ履歴を読み込み */
+    /** パスが存在するディレクトリかどうか */
+    private static boolean isExistingDirectory(String path) {
+        if (!path?.trim()) return false
+        try {
+            return Files.isDirectory(Paths.get(path.trim()))
+        } catch (Exception ignored) {
+            return false
+        }
+    }
+
+    /** CONFIG_DIR/history.txt から対象フォルダ履歴を読み込み（存在するフォルダのみ） */
     private void loadSourceHistory() {
         try {
             if (Files.exists(SOURCE_HISTORY_FILE)) {
                 Files.readAllLines(SOURCE_HISTORY_FILE, StandardCharsets.UTF_8).each { line ->
                     def v = line.trim()
-                    if (v && !sourceHistory.contains(v)) {
+                    if (v && !sourceHistory.contains(v) && isExistingDirectory(v)) {
                         sourceHistory.add(v)
                         sourceDirCombo.addItem(v)
                     }
@@ -354,20 +364,22 @@ class FileCollectorFrame extends JFrame {
         }
     }
 
-    /** 対象フォルダ履歴を CONFIG_DIR/history.txt に保存 */
+    /** 対象フォルダ履歴を CONFIG_DIR/history.txt に保存（存在するフォルダのみ） */
     private void saveSourceHistory() {
         try {
+            def existing = sourceHistory.findAll { isExistingDirectory(it) }
+            if (existing.isEmpty()) return
             Files.createDirectories(CONFIG_DIR)
-            Files.write(SOURCE_HISTORY_FILE, sourceHistory, StandardCharsets.UTF_8,
+            Files.write(SOURCE_HISTORY_FILE, existing, StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)
         } catch (Exception ignored) {
         }
     }
 
-    /** 対象フォルダを履歴の先頭に追加し、保存 */
+    /** 対象フォルダを履歴の先頭に追加し、保存（存在するフォルダのみ追加） */
     private void addSourceHistory(String path) {
         def v = path?.trim()
-        if (!v) return
+        if (!v || !isExistingDirectory(v)) return
         if (!sourceHistory.contains(v)) {
             sourceHistory.add(0, v)
             sourceDirCombo.insertItemAt(v, 0)
