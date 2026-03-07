@@ -5,6 +5,8 @@
 package filecollector
 
 import java.awt.*
+import java.awt.datatransfer.Clipboard
+import java.awt.datatransfer.StringSelection
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.awt.event.WindowAdapter
@@ -40,10 +42,11 @@ class FileCollectorFrame extends JFrame {
     private final JTextArea logArea = new JTextArea()
     private final DefaultListModel<String> fileListModel = new DefaultListModel<>()
     private final JList<String> fileList = new JList<>(fileListModel)
-    private final JButton searchButton = new JButton("抽出")
+    private final JButton searchButton = new JButton("ファイル抽出")
     private final JComboBox<String> outputCountCombo = new JComboBox<>(["5", "10", "20", "50", "100"] as String[])
-    private final JButton copyFilesButton = new JButton("ファイル出力")
-    private final JButton fileListButton = new JButton("tree 出力")
+    private final JButton clipboardOutputButton = new JButton("クリップボードに出力")
+    private final JButton copyFilesButton = new JButton("ファイルに出力")
+    private final JButton fileListButton = new JButton("ファイル tree 出力")
     private final JButton removeSelectedButton = new JButton("選択削除")
     private final JButton removeExceptSelectedButton = new JButton("選択以外削除")
     private final JCheckBox clearBeforeOutputCheckBox = new JCheckBox("既存ファイル削除", true)
@@ -169,7 +172,7 @@ class FileCollectorFrame extends JFrame {
         // 拡張子追加文字 + 抽出ボタン
         row++
         c.gridx = 0; c.gridy = row; c.anchor = GridBagConstraints.EAST; c.fill = GridBagConstraints.NONE
-        form.add(new JLabel("末尾追加文字"), c)
+        form.add(new JLabel("拡張子追加文字"), c)
         c.gridx = 1; c.weightx = 0.5; c.gridwidth = 1; c.anchor = GridBagConstraints.WEST; c.fill = GridBagConstraints.HORIZONTAL
         form.add(zipSuffixField, c)
         c.gridx = 2; c.weightx = 0.5; c.anchor = GridBagConstraints.CENTER; c.fill = GridBagConstraints.HORIZONTAL
@@ -199,6 +202,10 @@ class FileCollectorFrame extends JFrame {
         leftButtonsPanel.add(removeExceptSelectedButton)
         resultHeader.add(leftButtonsPanel, BorderLayout.WEST)
         def rightButtonsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0))
+        rightButtonsPanel.add(clipboardOutputButton)
+        rightButtonsPanel.add(Box.createHorizontalStrut(12))
+        rightButtonsPanel.add(new JSeparator(SwingConstants.VERTICAL))
+        rightButtonsPanel.add(Box.createHorizontalStrut(12))
         rightButtonsPanel.add(new JLabel("1回あたり"))
         outputCountCombo.setEditable(true)
         outputCountCombo.setPreferredSize(new Dimension(55, outputCountCombo.getPreferredSize().height as int))
@@ -212,14 +219,16 @@ class FileCollectorFrame extends JFrame {
         content.add(center, BorderLayout.CENTER)
 
         copyFilesButton.enabled = false
+        clipboardOutputButton.enabled = false
         removeSelectedButton.enabled = false
         removeExceptSelectedButton.enabled = false
-        // リストで選択があるときのみ「選択削除」「選択以外削除」を有効化
+        // リストで選択があるときのみ「選択削除」「選択以外削除」「クリップボード出力」を有効化
         fileList.addListSelectionListener {
             if (!it.valueIsAdjusting) {
                 def hasSelection = fileList.selectedIndices.length > 0
                 removeSelectedButton.enabled = hasSelection
                 removeExceptSelectedButton.enabled = hasSelection
+                clipboardOutputButton.enabled = hasSelection
             }
         }
 
@@ -233,6 +242,7 @@ class FileCollectorFrame extends JFrame {
         outputCountCombo.addActionListener { saveOutputCount() }
         searchButton.addActionListener { doSearch() }
         copyFilesButton.addActionListener { doCopyFiles() }
+        clipboardOutputButton.addActionListener { doClipboardOutput() }
         fileListButton.addActionListener { doFileListOutput() }
         removeSelectedButton.addActionListener { removeSelectedFromResult() }
         removeExceptSelectedButton.addActionListener { removeExceptSelectedFromResult() }
@@ -270,6 +280,39 @@ class FileCollectorFrame extends JFrame {
         lastFoundFiles.addAll(newPaths)
         copyFilesButton.enabled = !lastFoundFiles.isEmpty()
         appendLog("選択以外を削除しました。${newModelItems.size()} 件を残しました。")
+    }
+
+    /** 選択したファイルの内容を結合してクリップボードに出力 */
+    private void doClipboardOutput() {
+        int[] indices = fileList.selectedIndices
+        if (indices == null || indices.length == 0) return
+        if (!getSourceDirText()?.trim()) {
+            showError("対象フォルダを指定してください。")
+            return
+        }
+        def parts = []
+        int skipped = 0
+        indices.toList().sort().each { int idx ->
+            if (idx >= lastFoundFiles.size()) return
+            Path path = lastFoundFiles.get(idx)
+            try {
+                String content = Files.readString(path, StandardCharsets.UTF_8)
+                if (parts) parts << ""
+                parts << content
+            } catch (Exception e) {
+                skipped++
+                parts << "(読み取りスキップ: ${path.fileName})"
+            }
+        }
+        String text = parts.join("\n")
+        try {
+            Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard()
+            clipboard.setContents(new StringSelection(text), null)
+            appendLog("クリップボードに ${indices.length} 件の内容を出力しました。${skipped > 0 ? "（スキップ ${skipped} 件）" : ""}")
+        } catch (Exception e) {
+            appendLog("クリップボード出力エラー: ${getErrorMessage(e)}")
+            showError("クリップボードにコピーできませんでした: ${getErrorMessage(e)}")
+        }
     }
 
     /** フォルダ選択ダイアログを開き、選択したパスをコンボに設定 */
