@@ -130,20 +130,20 @@ class FileCollectorFrame extends JFrame {
                 String msg = """\
 抽出条件（glob パターン）の例:
 
-- glob 特殊記号
-  *   : 任意の文字列（/ を含まない）
-  **  : 任意の階層・任意の文字列
-  ?   : 任意の 1 文字
-
 - 特別仕様（このツール固有の仕様）
   入力パターンの先頭に ** が自動付与される
 
 - 拡張子で指定
-  *.java → ***.java  : サブフォルダも含めた .java 全て
-  *Action.java → ***Action.java  : サブフォルダも含めた *Action.java 全て
+  *.java ( ***.java ) → サブフォルダも含めた .java 全て
+  *Action.java ( ***Action.java ) → サブフォルダも含めた *Action.java 全て
 
 - パスの一部で指定
-  src/**/Test*.java → **src/**/Test*.java : パスに src を含む Test で始まる .java
+  src/**/Test*.java ( **src/**/Test*.java ) → パスに src を含む Test で始まる .java
+
+- glob 特殊記号
+  *   : 任意の文字列（/ を含まない）
+  **  : 任意の階層・任意の文字列
+  ?   : 任意の 1 文字
 
 - 「...」は UI 上の簡易記法です
   /.../ や ... は内部的に ** に変換されます。
