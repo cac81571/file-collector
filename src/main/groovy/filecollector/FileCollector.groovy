@@ -14,6 +14,7 @@ import java.awt.event.WindowEvent
 import java.nio.charset.StandardCharsets
 import java.nio.file.*
 import java.security.MessageDigest
+import java.util.regex.Matcher
 import java.util.List
 
 import javax.swing.*
@@ -38,13 +39,15 @@ class FileCollectorFrame extends JFrame {
     // --- UI コンポーネント ---
     private final JComboBox<String> sourceDirCombo = new JComboBox<>()   // 対象フォルダ（履歴付き）
     private final JTextArea patternArea = new JTextArea("", 6, 55)       // 抽出条件（glob、複数行可）
-    private final JTextField zipSuffixField = new JTextField(".txt", 35) // ファイル出力時の拡張子追加文字
+    private final JTextField fileSuffixField = new JTextField(".txt", 6) // ファイル出力時の拡張子追加文字
     private final JTextArea logArea = new JTextArea()
     private final DefaultListModel<String> fileListModel = new DefaultListModel<>()
     private final JList<String> fileList = new JList<>(fileListModel)
     private final JButton searchButton = new JButton("ファイル抽出")
     private final JComboBox<String> outputCountCombo = new JComboBox<>(["5", "10", "20", "50", "100"] as String[])
-    private final JButton clipboardOutputButton = new JButton("クリップボードに出力")
+    private final JButton clipboardOutputButton = new JButton("<html>クリップボード<br/>に出力</html>")
+    private final JTextArea clipboardPrefixField = new JTextArea("# File: #{filepath}\r\n```#{ext}\r\n", 2, 12)
+    private final JTextArea clipboardSuffixField = new JTextArea("```\r\n", 2, 12)
     private final JButton copyFilesButton = new JButton("ファイルに出力")
     private final JButton fileListButton = new JButton("ファイル tree 出力")
     private final JButton removeSelectedButton = new JButton("選択削除")
@@ -133,24 +136,26 @@ class FileCollectorFrame extends JFrame {
                 String msg = """\
 抽出条件（glob パターン）の例:
 
-- 特別仕様（このツール固有の仕様）
-  入力パターンの先頭に ** が自動付与される
-
 - 拡張子で指定
-  *.java ( ***.java ) → サブフォルダも含めた .java 全て
-  *Action.java ( ***Action.java ) → サブフォルダも含めた *Action.java 全て
+  *.java → サブフォルダも含めた .java 全て
+  *Action.java → サブフォルダも含めた *Action.java 全て
 
 - パスの一部で指定
-  src/**/Test*.java ( **src/**/Test*.java ) → パスに src を含む Test で始まる .java
+  src/**/Test*.java → パスに src を含む Test で始まる .java
 
-- glob 特殊記号
+- 特別仕様（このツール固有の仕様）
+  ・入力した抽出条件の先頭に ** が自動付与されます。
+    例) *.java → ***.java
+    例) *Action.java → ***Action.java
+    例) src/**/Test*.java → **src/**/Test*.java
+
+  ・/.../ や ... は内部的に ** に変換されます。
+    例) src/.../Test.java  → src/**/Test.java
+
+- (参考) glob 特殊記号
   *   : 任意の文字列（/ を含まない）
   **  : 任意の階層・任意の文字列
   ?   : 任意の 1 文字
-
-- 「...」は UI 上の簡易記法です
-  /.../ や ... は内部的に ** に変換されます。
-  例) src/.../Test.java  → src/**/Test.java
 
 複数条件を書く場合は、1 行につき 1 パターン入力してください。
 """.stripIndent()
@@ -169,17 +174,49 @@ class FileCollectorFrame extends JFrame {
         form.add(patternScroll, c)
         c.gridwidth = 1
 
-        // 拡張子追加文字 + 抽出ボタン
-        row++
-        c.gridx = 0; c.gridy = row; c.anchor = GridBagConstraints.EAST; c.fill = GridBagConstraints.NONE
-        form.add(new JLabel("拡張子追加文字"), c)
-        c.gridx = 1; c.weightx = 0.5; c.gridwidth = 1; c.anchor = GridBagConstraints.WEST; c.fill = GridBagConstraints.HORIZONTAL
-        form.add(zipSuffixField, c)
-        c.gridx = 2; c.weightx = 0.5; c.anchor = GridBagConstraints.CENTER; c.fill = GridBagConstraints.HORIZONTAL
-        form.add(searchButton, c)
-        c.gridwidth = 1
+        // 先頭・末尾・拡張子追加文字（抽出結果行と同様の別 JPanel）
+        def optionsRow = new JPanel(new BorderLayout())
+        def optionsLeft = new JPanel()
+        optionsLeft.setLayout(new BoxLayout(optionsLeft, BoxLayout.LINE_AXIS))
+        def prefixLabel2 = new JLabel("<html>クリップボード<br/>出力</html>")
+        prefixLabel2.alignmentY = Component.TOP_ALIGNMENT
+        optionsLeft.add(prefixLabel2)
+        optionsLeft.add(Box.createHorizontalStrut(24))
+        def prefixLabel = new JLabel("<html>先頭<br/>付加</html>")
+        prefixLabel.alignmentY = Component.TOP_ALIGNMENT
+        optionsLeft.add(prefixLabel)
+        optionsLeft.add(Box.createHorizontalStrut(4))
+        clipboardPrefixField.setToolTipText("クリップボード出力時にファイルの先頭に追加。#{ext} #{filename} #{filepath} で置換")
+        clipboardPrefixField.lineWrap = true
+        clipboardPrefixField.wrapStyleWord = true
+        def prefixScroll = new JScrollPane(clipboardPrefixField)
+        prefixScroll.setPreferredSize(new Dimension(200, 40))
+        prefixScroll.alignmentY = Component.TOP_ALIGNMENT
+        optionsLeft.add(prefixScroll)
+        optionsLeft.add(Box.createHorizontalStrut(8))
+        def suffixLabel = new JLabel("<html>末尾<br/>付加</html>")
+        suffixLabel.alignmentY = Component.TOP_ALIGNMENT
+        optionsLeft.add(suffixLabel)
+        optionsLeft.add(Box.createHorizontalStrut(4))
+        clipboardSuffixField.setToolTipText("クリップボード出力時にファイルの末尾に追加。\${ext} \${filename} \${filepath} で置換")
+        clipboardSuffixField.lineWrap = true
+        clipboardSuffixField.wrapStyleWord = true
+        def suffixScroll = new JScrollPane(clipboardSuffixField)
+        suffixScroll.setPreferredSize(new Dimension(200, 40))
+        suffixScroll.alignmentY = Component.TOP_ALIGNMENT
+        optionsLeft.add(suffixScroll)
+        optionsLeft.add(Box.createHorizontalStrut(8))
+        clipboardOutputButton.alignmentY = Component.TOP_ALIGNMENT
+        optionsLeft.add(clipboardOutputButton)
 
-        content.add(form, BorderLayout.NORTH)
+        optionsRow.add(optionsLeft, BorderLayout.WEST)
+        optionsRow.add(searchButton, BorderLayout.EAST)
+
+        def topPanel = new JPanel()
+        topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS))
+        topPanel.add(form)
+        topPanel.add(optionsRow)
+        content.add(topPanel, BorderLayout.NORTH)
 
         // 中央エリア：抽出結果リスト + ログ
         logArea.setEditable(false)
@@ -202,13 +239,13 @@ class FileCollectorFrame extends JFrame {
         leftButtonsPanel.add(removeExceptSelectedButton)
         resultHeader.add(leftButtonsPanel, BorderLayout.WEST)
         def rightButtonsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0))
-        rightButtonsPanel.add(clipboardOutputButton)
-        rightButtonsPanel.add(Box.createHorizontalStrut(12))
-        rightButtonsPanel.add(new JSeparator(SwingConstants.VERTICAL))
-        rightButtonsPanel.add(Box.createHorizontalStrut(12))
+        rightButtonsPanel.add(new JLabel("拡張子追加文字"))
+        fileSuffixField.setToolTipText("ファイル出力時に拡張子の末尾に追加する文字列")
+        rightButtonsPanel.add(fileSuffixField)
         rightButtonsPanel.add(new JLabel("1回あたり"))
         outputCountCombo.setEditable(true)
         outputCountCombo.setPreferredSize(new Dimension(55, outputCountCombo.getPreferredSize().height as int))
+        outputCountCombo.setToolTipText("ファイル出力時に一度に出力するファイル数の上限")
         rightButtonsPanel.add(outputCountCombo)
         rightButtonsPanel.add(new JLabel("件"))
         rightButtonsPanel.add(copyFilesButton)
@@ -286,10 +323,14 @@ class FileCollectorFrame extends JFrame {
     private void doClipboardOutput() {
         int[] indices = fileList.selectedIndices
         if (indices == null || indices.length == 0) return
-        if (!getSourceDirText()?.trim()) {
+        def baseDirStr = getSourceDirText()?.trim()
+        if (!baseDirStr) {
             showError("対象フォルダを指定してください。")
             return
         }
+        Path baseDir = Paths.get(baseDirStr)
+        String prefixTemplate = clipboardPrefixField?.text ?: ""
+        String suffixTemplate = clipboardSuffixField?.text ?: ""
         def parts = []
         int skipped = 0
         indices.toList().sort().each { int idx ->
@@ -298,7 +339,9 @@ class FileCollectorFrame extends JFrame {
             try {
                 String content = Files.readString(path, StandardCharsets.UTF_8)
                 if (parts) parts << ""
-                parts << content
+                String prefix = applyClipboardPlaceholders(prefixTemplate, path, baseDir)
+                String suffix = applyClipboardPlaceholders(suffixTemplate, path, baseDir)
+                parts << (prefix + content + suffix)
             } catch (Exception e) {
                 skipped++
                 parts << "(読み取りスキップ: ${path.fileName})"
@@ -313,6 +356,20 @@ class FileCollectorFrame extends JFrame {
             appendLog("クリップボード出力エラー: ${getErrorMessage(e)}")
             showError("クリップボードにコピーできませんでした: ${getErrorMessage(e)}")
         }
+    }
+
+    /** 先頭・末尾テンプレートの置換パラメータ（#{ext} #{filename} #{filepath}）を適用 */
+    private static String applyClipboardPlaceholders(String template, Path path, Path baseDir) {
+        if (!template) return ""
+        def fileName = path.fileName?.toString() ?: ""
+        def ext = ""
+        def dotIdx = fileName.lastIndexOf('.')
+        if (dotIdx > 0) ext = fileName.substring(dotIdx + 1)
+        def relativePath = baseDir.relativize(path).toString().replace('\\', '/')
+        return template
+                .replaceAll(/#\{ext\}/, Matcher.quoteReplacement(ext))
+                .replaceAll(/#\{filename\}/, Matcher.quoteReplacement(fileName))
+                .replaceAll(/#\{filepath\}/, Matcher.quoteReplacement(relativePath))
     }
 
     /** フォルダ選択ダイアログを開き、選択したパスをコンボに設定 */
@@ -506,7 +563,7 @@ class FileCollectorFrame extends JFrame {
         }
         Path baseDir = Paths.get(src)
         String baseName = baseDir.getFileName() != null ? baseDir.getFileName().toString() : "filecollector"
-        String suffix = zipSuffixField.text?.trim() ?: ""
+        String suffix = fileSuffixField.text?.trim() ?: ""
         Path outDir = FILE_OUTPUT_DIR
         try {
             if (clearBeforeOutputCheckBox.isSelected() && Files.exists(outDir)) {
