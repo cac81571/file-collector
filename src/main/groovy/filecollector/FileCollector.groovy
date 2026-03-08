@@ -125,7 +125,7 @@ class FileCollectorFrame extends JFrame {
         row++
         c.gridx = 0; c.gridy = row; c.anchor = GridBagConstraints.EAST; c.fill = GridBagConstraints.NONE
         def patternLabelPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0))
-        def patternLabel = new JLabel("抽出条件")
+        def patternLabel = new JLabel("<html>抽出条件<br/>(glob パターン)</html>")
         // FlatLaf HelpButton（色は main で UIManager の HelpButton.background / questionMarkColor を設定）
         def helpIconButton = new JButton()
         helpIconButton.putClientProperty(FlatClientProperties.BUTTON_TYPE, FlatClientProperties.BUTTON_TYPE_HELP)
