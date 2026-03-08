@@ -48,6 +48,7 @@ class FileCollectorFrame extends JFrame {
     private final JButton clipboardOutputButton = new JButton("<html>クリップボード<br/>に出力</html>")
     private final JTextArea clipboardPrefixField = new JTextArea("# File: #{filepath}\r\n```#{ext}\r\n", 2, 12)
     private final JTextArea clipboardSuffixField = new JTextArea("```\r\n", 2, 12)
+    private final JButton aiMessageButton = new JButton("AI用メッセージ")
     private final JButton copyFilesButton = new JButton("ファイルに出力")
     private final JButton fileListButton = new JButton("ファイル tree 出力")
     private final JButton removeSelectedButton = new JButton("選択削除")
@@ -239,6 +240,7 @@ class FileCollectorFrame extends JFrame {
         leftButtonsPanel.add(removeExceptSelectedButton)
         resultHeader.add(leftButtonsPanel, BorderLayout.WEST)
         def rightButtonsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0))
+        rightButtonsPanel.add(aiMessageButton)
         rightButtonsPanel.add(new JLabel("拡張子追加文字"))
         fileSuffixField.setToolTipText("ファイル出力時に拡張子の末尾に追加する文字列")
         rightButtonsPanel.add(fileSuffixField)
@@ -256,6 +258,7 @@ class FileCollectorFrame extends JFrame {
         content.add(center, BorderLayout.CENTER)
 
         copyFilesButton.enabled = false
+        aiMessageButton.enabled = false
         clipboardOutputButton.enabled = false
         removeSelectedButton.enabled = false
         removeExceptSelectedButton.enabled = false
@@ -279,6 +282,7 @@ class FileCollectorFrame extends JFrame {
         outputCountCombo.addActionListener { saveOutputCount() }
         searchButton.addActionListener { doSearch() }
         copyFilesButton.addActionListener { doCopyFiles() }
+        aiMessageButton.addActionListener { doAiMessage() }
         clipboardOutputButton.addActionListener { doClipboardOutput() }
         fileListButton.addActionListener { doFileListOutput() }
         removeSelectedButton.addActionListener { removeSelectedFromResult() }
@@ -297,6 +301,7 @@ class FileCollectorFrame extends JFrame {
             }
         }
         copyFilesButton.enabled = !lastFoundFiles.isEmpty()
+        aiMessageButton.enabled = !lastFoundFiles.isEmpty()
         appendLog("選択した ${indices.length} 件を抽出結果から削除しました。")
     }
 
@@ -316,6 +321,7 @@ class FileCollectorFrame extends JFrame {
         lastFoundFiles.clear()
         lastFoundFiles.addAll(newPaths)
         copyFilesButton.enabled = !lastFoundFiles.isEmpty()
+        aiMessageButton.enabled = !lastFoundFiles.isEmpty()
         appendLog("選択以外を削除しました。${newModelItems.size()} 件を残しました。")
     }
 
@@ -354,6 +360,35 @@ class FileCollectorFrame extends JFrame {
             appendLog("クリップボードに ${indices.length} 件の内容を出力しました。${skipped > 0 ? "（スキップ ${skipped} 件）" : ""}")
         } catch (Exception e) {
             appendLog("クリップボード出力エラー: ${getErrorMessage(e)}")
+            showError("クリップボードにコピーできませんでした: ${getErrorMessage(e)}")
+        }
+    }
+
+    /** AI用メッセージをクリップボードに出力 */
+    private void doAiMessage() {
+        if (lastFoundFiles.isEmpty()) {
+            showError("まず抽出を行い、ファイル一覧を取得してください。")
+            return
+        }
+        int count = fileListModel.size()
+        def lines = []
+        lines << "これからファイルを分割して送ります。"
+        lines << "全部で ${count} ファイルあります。"
+        lines << ""
+        (0..<count).each { int i ->
+            def path = fileListModel.getElementAt(i)?.replace('\\', '/') ?: ""
+            lines << "${i + 1}/${count}  ${path}"
+        }
+        lines << ""
+        lines << "これから順番に送ります。"
+        lines << "すべて送るまで解析しないでください。"
+        String text = lines.join("\n")
+        try {
+            Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard()
+            clipboard.setContents(new StringSelection(text), null)
+            appendLog("AI用メッセージをクリップボードに出力しました（${count} 件）。")
+        } catch (Exception e) {
+            appendLog("AI用メッセージ出力エラー: ${getErrorMessage(e)}")
             showError("クリップボードにコピーできませんでした: ${getErrorMessage(e)}")
         }
     }
@@ -511,6 +546,7 @@ class FileCollectorFrame extends JFrame {
 
         searchButton.enabled = false
         copyFilesButton.enabled = false
+        aiMessageButton.enabled = false
         logArea.text = ""
 
         appendLog("抽出開始: $srcDir")
@@ -545,6 +581,7 @@ class FileCollectorFrame extends JFrame {
                 SwingUtilities.invokeLater {
                     searchButton.enabled = true
                     copyFilesButton.enabled = !lastFoundFiles.isEmpty()
+                    aiMessageButton.enabled = !lastFoundFiles.isEmpty()
                 }
             }
         }, "FileCollectorWorker").start()
@@ -590,6 +627,7 @@ class FileCollectorFrame extends JFrame {
             // 出力したファイルをリストから削除
             toCopy.times { fileListModel.remove(0); lastFoundFiles.remove(0) }
             copyFilesButton.enabled = !lastFoundFiles.isEmpty()
+            aiMessageButton.enabled = !lastFoundFiles.isEmpty()
         } catch (Exception e) {
             appendLog("各ファイル出力中にエラー: ${getErrorMessage(e)}")
             e.printStackTrace()
