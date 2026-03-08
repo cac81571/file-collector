@@ -7,6 +7,8 @@ package filecollector
 import java.awt.*
 import java.awt.datatransfer.Clipboard
 import java.awt.datatransfer.StringSelection
+import java.awt.event.InputEvent
+import java.awt.event.KeyEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.awt.event.WindowAdapter
@@ -43,7 +45,7 @@ class FileCollectorFrame extends JFrame {
     private final JTextArea logArea = new JTextArea()
     private final DefaultListModel<String> fileListModel = new DefaultListModel<>()
     private final JList<String> fileList = new JList<>(fileListModel)
-    private final JButton searchButton = new JButton("ファイル抽出")
+    private final JButton searchButton = new JButton("<html>ファイル抽出<<br/>(Ctrl+Enter)</html>")
     private final JComboBox<String> outputCountCombo = new JComboBox<>(["5", "10", "20", "50", "100"] as String[])
     private final JButton clipboardOutputButton = new JButton("<html>クリップボード<br/>に出力</html>")
     private final JTextArea clipboardPrefixField = new JTextArea("# File: #{filepath}\r\n```#{ext}\r\n", 2, 12)
@@ -281,6 +283,13 @@ class FileCollectorFrame extends JFrame {
     private void initActions() {
         outputCountCombo.addActionListener { saveOutputCount() }
         searchButton.addActionListener { doSearch() }
+        // ファイル抽出のショートカット: Ctrl+Enter
+        getRootPane().registerKeyboardAction(
+                { doSearch() },
+                KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.CTRL_DOWN_MASK),
+                JComponent.WHEN_IN_FOCUSED_WINDOW
+        )
+        searchButton.setToolTipText("対象フォルダを抽出（Ctrl+Enter）")
         copyFilesButton.addActionListener { doCopyFiles() }
         aiMessageButton.addActionListener { doAiMessage() }
         clipboardOutputButton.addActionListener { doClipboardOutput() }
