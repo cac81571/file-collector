@@ -40,6 +40,7 @@ class FileCollector {
 class FileCollectorFrame extends JFrame {
     // --- UI コンポーネント ---
     private final JComboBox<String> sourceDirCombo = new JComboBox<>()   // 対象フォルダ（履歴付き）
+    private final JTextField sourceFilterField = new JTextField(20)      // 対象フォルダ履歴フィルタ
     private final JTextArea patternArea = new JTextArea("", 6, 55)       // 抽出条件（glob、複数行可）
     private final JTextField fileSuffixField = new JTextField(".txt", 6) // ファイル出力時の拡張子追加文字
     private final JTextArea logArea = new JTextArea()
@@ -50,6 +51,7 @@ class FileCollectorFrame extends JFrame {
     private final JButton clipboardOutputButton = new JButton("<html>クリップボード<br/>に出力</html>")
     private final JTextArea clipboardPrefixField = new JTextArea("# File: #{filepath}\r\n```#{ext}\r\n", 2, 12)
     private final JTextArea clipboardSuffixField = new JTextArea("```\r\n", 2, 12)
+    private final JCheckBox clipboardAddPrefixSuffixCheckBox = new JCheckBox("文字付加する", true)
     private final JButton aiMessageButton = new JButton("AI用メッセージ")
     private final JButton copyFilesButton = new JButton("ファイルに出力")
     private final JButton fileListButton = new JButton("ファイル tree 出力")
@@ -79,7 +81,7 @@ class FileCollectorFrame extends JFrame {
         def resourceUrl = FileCollectorFrame.class.getResource(FileCollectorFrame.class.simpleName + ".class")
         boolean isJarExecution = resourceUrl != null && resourceUrl.toString().startsWith("jar:")
         setDefaultCloseOperation(isJarExecution ? JFrame.EXIT_ON_CLOSE : JFrame.DISPOSE_ON_CLOSE)
-        setSize(800, 600)
+        setSize(825, 600)
         setLocationRelativeTo(null)
 
         initLayout()
@@ -111,20 +113,47 @@ class FileCollectorFrame extends JFrame {
 
         int row = 0
 
-        // 対象フォルダ行
-        c.gridx = 0; c.gridy = row; c.anchor = GridBagConstraints.EAST; c.fill = GridBagConstraints.NONE
-        form.add(new JLabel("対象フォルダ"), c)
-        c.gridx = 1; c.weightx = 1.0; c.anchor = GridBagConstraints.WEST; c.fill = GridBagConstraints.HORIZONTAL
+        // 対象フォルダ行（1 行を JPanel でまとめてレイアウト）
+        def sourceRowPanel = new JPanel(new BorderLayout(4, 0))
+
+        // 左側: ラベル + フィルタテキストボックス
+        def sourceLeftPanel = new JPanel()
+        sourceLeftPanel.setLayout(new BoxLayout(sourceLeftPanel, BoxLayout.LINE_AXIS))
+        def sourceLabel = new JLabel("対象フォルダ")
+        sourceLabel.setHorizontalAlignment(SwingConstants.RIGHT)
+        sourceLabel.alignmentY = Component.CENTER_ALIGNMENT
+        sourceFilterField.columns = 15
+        // FlatLaf のプレースホルダテキスト
+        sourceFilterField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "フィルタ条件（部分一致）")
+        sourceFilterField.alignmentY = Component.CENTER_ALIGNMENT
+        sourceLeftPanel.add(sourceLabel)
+        sourceLeftPanel.add(Box.createHorizontalStrut(6))
+        sourceLeftPanel.add(sourceFilterField)
+        sourceRowPanel.add(sourceLeftPanel, BorderLayout.WEST)
+
+        def sourceCenterPanel = new JPanel(new BorderLayout(4, 0))
         sourceDirCombo.setEditable(true)
         sourceDirCombo.setPreferredSize(new Dimension(500, sourceDirCombo.getPreferredSize().height as int))
-        form.add(sourceDirCombo, c)
-        c.gridx = 2; c.weightx = 0.0
-        form.add(fileListButton, c)
+        sourceCenterPanel.add(sourceDirCombo, BorderLayout.CENTER)
+        sourceCenterPanel.add(fileListButton, BorderLayout.EAST)
 
-        // 抽出条件（glob パターン、1行1パターン）
+        sourceRowPanel.add(sourceCenterPanel, BorderLayout.CENTER)
+
+        c.gridx = 0
+        c.gridy = row
+        c.gridwidth = 3
+        c.weightx = 1.0
+        c.anchor = GridBagConstraints.WEST
+        c.fill = GridBagConstraints.HORIZONTAL
+        form.add(sourceRowPanel, c)
+        c.gridwidth = 1
+
+        // 抽出条件（glob パターン、1行1パターン）行も JPanel でまとめる
         row++
-        c.gridx = 0; c.gridy = row; c.anchor = GridBagConstraints.EAST; c.fill = GridBagConstraints.NONE
-        def patternLabelPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0))
+        def patternRowPanel = new JPanel(new BorderLayout(4, 0))
+
+        def patternLabelPanel = new JPanel()
+        patternLabelPanel.setLayout(new BoxLayout(patternLabelPanel, BoxLayout.LINE_AXIS))
         def patternLabel = new JLabel("<html>抽出条件<br/>(glob パターン)</html>")
         // FlatLaf HelpButton（色は main で UIManager の HelpButton.background / questionMarkColor を設定）
         def helpIconButton = new JButton()
@@ -165,25 +194,43 @@ class FileCollectorFrame extends JFrame {
                 JOptionPane.showMessageDialog(FileCollectorFrame.this, msg, "抽出条件の説明", JOptionPane.INFORMATION_MESSAGE)
             }
         })
+        patternLabel.alignmentY = Component.CENTER_ALIGNMENT
+        helpIconButton.alignmentY = Component.CENTER_ALIGNMENT
+
         patternLabelPanel.add(patternLabel)
         patternLabelPanel.add(Box.createHorizontalStrut(4))
         patternLabelPanel.add(helpIconButton)
-        form.add(patternLabelPanel, c)
-        c.gridx = 1; c.weightx = 1.0; c.gridwidth = 2; c.anchor = GridBagConstraints.WEST; c.fill = GridBagConstraints.HORIZONTAL
+
+        patternRowPanel.add(patternLabelPanel, BorderLayout.WEST)
+
         def patternScroll = new JScrollPane(patternArea)
         patternScroll.setMinimumSize(new Dimension(150, 90))
         patternArea.lineWrap = true
         patternArea.wrapStyleWord = true
-        form.add(patternScroll, c)
+        patternRowPanel.add(patternScroll, BorderLayout.CENTER)
+
+        c.gridx = 0
+        c.gridy = row
+        c.gridwidth = 3
+        c.weightx = 1.0
+        c.anchor = GridBagConstraints.WEST
+        c.fill = GridBagConstraints.HORIZONTAL
+        form.add(patternRowPanel, c)
         c.gridwidth = 1
 
         // 先頭・末尾・拡張子追加文字（抽出結果行と同様の別 JPanel）
         def optionsRow = new JPanel(new BorderLayout())
         def optionsLeft = new JPanel()
         optionsLeft.setLayout(new BoxLayout(optionsLeft, BoxLayout.LINE_AXIS))
-        def prefixLabel2 = new JLabel("<html>クリップボード<br/>出力</html>")
-        prefixLabel2.alignmentY = Component.TOP_ALIGNMENT
-        optionsLeft.add(prefixLabel2)
+        def clipboardLabelPanel = new JPanel()
+        clipboardLabelPanel.setLayout(new BoxLayout(clipboardLabelPanel, BoxLayout.Y_AXIS))
+        def prefixLabel2 = new JLabel("クリップボード出力")
+        prefixLabel2.alignmentX = Component.LEFT_ALIGNMENT
+        clipboardLabelPanel.add(prefixLabel2)
+        clipboardAddPrefixSuffixCheckBox.alignmentX = Component.LEFT_ALIGNMENT
+        clipboardLabelPanel.add(clipboardAddPrefixSuffixCheckBox)
+        clipboardLabelPanel.alignmentY = Component.TOP_ALIGNMENT
+        optionsLeft.add(clipboardLabelPanel)
         optionsLeft.add(Box.createHorizontalStrut(24))
         def prefixLabel = new JLabel("<html>先頭<br/>付加</html>")
         prefixLabel.alignmentY = Component.TOP_ALIGNMENT
@@ -296,6 +343,39 @@ class FileCollectorFrame extends JFrame {
         fileListButton.addActionListener { doFileListOutput() }
         removeSelectedButton.addActionListener { removeSelectedFromResult() }
         removeExceptSelectedButton.addActionListener { removeExceptSelectedFromResult() }
+
+        // 対象フォルダ履歴フィルタ: 入力されるたびに部分一致でコンボの候補を絞り込み
+        sourceFilterField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override
+            void insertUpdate(javax.swing.event.DocumentEvent e) {
+                applySourceFilter(sourceFilterField.text)
+                if (sourceDirCombo.itemCount > 0) {
+                    sourceDirCombo.showPopup()
+                } else {
+                    sourceDirCombo.hidePopup()
+                }
+            }
+
+            @Override
+            void removeUpdate(javax.swing.event.DocumentEvent e) {
+                applySourceFilter(sourceFilterField.text)
+                if (sourceDirCombo.itemCount > 0) {
+                    sourceDirCombo.showPopup()
+                } else {
+                    sourceDirCombo.hidePopup()
+                }
+            }
+
+            @Override
+            void changedUpdate(javax.swing.event.DocumentEvent e) {
+                applySourceFilter(sourceFilterField.text)
+                if (sourceDirCombo.itemCount > 0) {
+                    sourceDirCombo.showPopup()
+                } else {
+                    sourceDirCombo.hidePopup()
+                }
+            }
+        })
     }
 
     /** 抽出結果リストで選択した行を削除 */
@@ -344,8 +424,9 @@ class FileCollectorFrame extends JFrame {
             return
         }
         Path baseDir = Paths.get(baseDirStr)
-        String prefixTemplate = clipboardPrefixField?.text ?: ""
-        String suffixTemplate = clipboardSuffixField?.text ?: ""
+        boolean addPrefixSuffix = clipboardAddPrefixSuffixCheckBox.selected
+        String prefixTemplate = addPrefixSuffix ? (clipboardPrefixField?.text ?: "") : ""
+        String suffixTemplate = addPrefixSuffix ? (clipboardSuffixField?.text ?: "") : ""
         def parts = []
         int skipped = 0
         indices.toList().sort().each { int idx ->
@@ -354,8 +435,8 @@ class FileCollectorFrame extends JFrame {
             try {
                 String content = Files.readString(path, StandardCharsets.UTF_8)
                 if (parts) parts << ""
-                String prefix = applyClipboardPlaceholders(prefixTemplate, path, baseDir)
-                String suffix = applyClipboardPlaceholders(suffixTemplate, path, baseDir)
+                String prefix = addPrefixSuffix ? applyClipboardPlaceholders(prefixTemplate, path, baseDir) : ""
+                String suffix = addPrefixSuffix ? applyClipboardPlaceholders(suffixTemplate, path, baseDir) : ""
                 parts << (prefix + content + suffix)
             } catch (Exception e) {
                 skipped++
@@ -457,9 +538,10 @@ class FileCollectorFrame extends JFrame {
                     def v = line.trim()
                     if (v && !sourceHistory.contains(v) && isExistingDirectory(v)) {
                         sourceHistory.add(v)
-                        sourceDirCombo.addItem(v)
                     }
                 }
+                // 初期表示はフィルタ無しで全件をコンボに反映
+                applySourceFilter("")
             }
         } catch (Exception ignored) {
         }
@@ -520,13 +602,25 @@ class FileCollectorFrame extends JFrame {
         }
     }
 
+    /** フィルタ文字列に基づき、対象フォルダコンボの項目を部分一致で再構築 */
+    private void applySourceFilter(String filterText) {
+        def filter = filterText?.trim()?.toLowerCase() ?: ""
+        sourceDirCombo.removeAllItems()
+        sourceHistory.each { v ->
+            if (!filter || v.toLowerCase().contains(filter)) {
+                sourceDirCombo.addItem(v)
+            }
+        }
+    }
+
     /** 対象フォルダを履歴の先頭に追加し、保存（存在するフォルダのみ追加） */
     private void addSourceHistory(String path) {
         def v = path?.trim()
         if (!v || !isExistingDirectory(v)) return
         if (!sourceHistory.contains(v)) {
             sourceHistory.add(0, v)
-            sourceDirCombo.insertItemAt(v, 0)
+            // 履歴リストだけ更新し、コンボ表示は現在のフィルタ条件に基づき再構築
+            applySourceFilter(sourceFilterField.text)
         }
         saveSourceHistory()
     }
