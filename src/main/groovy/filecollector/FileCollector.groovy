@@ -48,10 +48,10 @@ class FileCollectorFrame extends JFrame {
     private final JList<String> fileList = new JList<>(fileListModel)
     private final JButton searchButton = new JButton("<html>ファイル抽出<<br/>(Ctrl+Enter)</html>")
     private final JComboBox<String> outputCountCombo = new JComboBox<>(["5", "10", "20", "50", "100"] as String[])
-    private final JButton clipboardOutputButton = new JButton("<html>クリップボード<br/>に出力</html>")
+    private final JButton clipboardOutputButton = new JButton("クリップボード出力")
     private final JTextArea clipboardPrefixField = new JTextArea("# File: #{filepath}\r\n```#{ext}\r\n", 2, 12)
     private final JTextArea clipboardSuffixField = new JTextArea("```\r\n", 2, 12)
-    private final JCheckBox clipboardAddPrefixSuffixCheckBox = new JCheckBox("文字付加する", true)
+    private final JCheckBox clipboardAddPrefixSuffixCheckBox = new JCheckBox("文字付加する", false)
     private final JButton aiMessageButton = new JButton("AI用メッセージ")
     private final JButton copyFilesButton = new JButton("ファイルに出力")
     private final JButton fileListButton = new JButton("ファイル tree 出力")
@@ -208,6 +208,12 @@ class FileCollectorFrame extends JFrame {
         patternArea.lineWrap = true
         patternArea.wrapStyleWord = true
         patternRowPanel.add(patternScroll, BorderLayout.CENTER)
+        def searchBtnPref = searchButton.getPreferredSize()
+        searchButton.setPreferredSize(new Dimension(searchBtnPref.width as int, 40))
+        searchButton.setMaximumSize(new Dimension(searchBtnPref.width as int, 40))
+        def searchBtnWrap = new JPanel(new BorderLayout())
+        searchBtnWrap.add(searchButton, BorderLayout.NORTH)
+        patternRowPanel.add(searchBtnWrap, BorderLayout.EAST)
 
         c.gridx = 0
         c.gridy = row
@@ -222,15 +228,9 @@ class FileCollectorFrame extends JFrame {
         def optionsRow = new JPanel(new BorderLayout())
         def optionsLeft = new JPanel()
         optionsLeft.setLayout(new BoxLayout(optionsLeft, BoxLayout.LINE_AXIS))
-        def clipboardLabelPanel = new JPanel()
-        clipboardLabelPanel.setLayout(new BoxLayout(clipboardLabelPanel, BoxLayout.Y_AXIS))
         def prefixLabel2 = new JLabel("クリップボード出力")
-        prefixLabel2.alignmentX = Component.LEFT_ALIGNMENT
-        clipboardLabelPanel.add(prefixLabel2)
-        clipboardAddPrefixSuffixCheckBox.alignmentX = Component.LEFT_ALIGNMENT
-        clipboardLabelPanel.add(clipboardAddPrefixSuffixCheckBox)
-        clipboardLabelPanel.alignmentY = Component.TOP_ALIGNMENT
-        optionsLeft.add(clipboardLabelPanel)
+        prefixLabel2.alignmentY = Component.TOP_ALIGNMENT
+        optionsLeft.add(prefixLabel2)
         optionsLeft.add(Box.createHorizontalStrut(24))
         def prefixLabel = new JLabel("<html>先頭<br/>付加</html>")
         prefixLabel.alignmentY = Component.TOP_ALIGNMENT
@@ -240,7 +240,7 @@ class FileCollectorFrame extends JFrame {
         clipboardPrefixField.lineWrap = true
         clipboardPrefixField.wrapStyleWord = true
         def prefixScroll = new JScrollPane(clipboardPrefixField)
-        prefixScroll.setPreferredSize(new Dimension(200, 40))
+        prefixScroll.setPreferredSize(new Dimension(240, 40))
         prefixScroll.alignmentY = Component.TOP_ALIGNMENT
         optionsLeft.add(prefixScroll)
         optionsLeft.add(Box.createHorizontalStrut(8))
@@ -252,15 +252,23 @@ class FileCollectorFrame extends JFrame {
         clipboardSuffixField.lineWrap = true
         clipboardSuffixField.wrapStyleWord = true
         def suffixScroll = new JScrollPane(clipboardSuffixField)
-        suffixScroll.setPreferredSize(new Dimension(200, 40))
+        suffixScroll.setPreferredSize(new Dimension(240, 40))
         suffixScroll.alignmentY = Component.TOP_ALIGNMENT
         optionsLeft.add(suffixScroll)
         optionsLeft.add(Box.createHorizontalStrut(8))
-        clipboardOutputButton.alignmentY = Component.TOP_ALIGNMENT
-        optionsLeft.add(clipboardOutputButton)
+        def clipboardButtonPanel = new JPanel()
+        clipboardButtonPanel.setLayout(new BoxLayout(clipboardButtonPanel, BoxLayout.Y_AXIS))
+        clipboardOutputButton.alignmentX = Component.LEFT_ALIGNMENT
+        clipboardButtonPanel.add(clipboardOutputButton)
+        clipboardAddPrefixSuffixCheckBox.alignmentX = Component.LEFT_ALIGNMENT
+        clipboardButtonPanel.add(clipboardAddPrefixSuffixCheckBox)
+        clipboardButtonPanel.alignmentY = Component.TOP_ALIGNMENT
+        optionsLeft.add(clipboardButtonPanel)
+
+        // 文字付加 OFF 時は先頭・末尾テキストエリアを非活性（初期は OFF のため非活性）
+        updateClipboardPrefixSuffixEnabled()
 
         optionsRow.add(optionsLeft, BorderLayout.WEST)
-        optionsRow.add(searchButton, BorderLayout.EAST)
 
         def topPanel = new JPanel()
         topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS))
@@ -340,6 +348,9 @@ class FileCollectorFrame extends JFrame {
         copyFilesButton.addActionListener { doCopyFiles() }
         aiMessageButton.addActionListener { doAiMessage() }
         clipboardOutputButton.addActionListener { doClipboardOutput() }
+        clipboardAddPrefixSuffixCheckBox.addItemListener {
+            updateClipboardPrefixSuffixEnabled()
+        }
         fileListButton.addActionListener { doFileListOutput() }
         removeSelectedButton.addActionListener { removeSelectedFromResult() }
         removeExceptSelectedButton.addActionListener { removeExceptSelectedFromResult() }
@@ -412,6 +423,13 @@ class FileCollectorFrame extends JFrame {
         copyFilesButton.enabled = !lastFoundFiles.isEmpty()
         aiMessageButton.enabled = !lastFoundFiles.isEmpty()
         appendLog("選択以外を削除しました。${newModelItems.size()} 件を残しました。")
+    }
+
+    /** 文字付加チェックに応じて先頭・末尾テキストエリアの有効/無効を切り替え */
+    private void updateClipboardPrefixSuffixEnabled() {
+        boolean enabled = clipboardAddPrefixSuffixCheckBox.selected
+        clipboardPrefixField.enabled = enabled
+        clipboardSuffixField.enabled = enabled
     }
 
     /** 選択したファイルの内容を結合してクリップボードに出力 */
