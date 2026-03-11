@@ -51,7 +51,7 @@ class FileCollectorFrame extends JFrame {
     private final JButton clipboardOutputButton = new JButton("クリップボード出力")
     private final JTextArea clipboardPrefixField = new JTextArea("# File: #{filepath}\r\n```#{ext}\r\n", 2, 12)
     private final JTextArea clipboardSuffixField = new JTextArea("```\r\n", 2, 12)
-    private final JCheckBox clipboardAddPrefixSuffixCheckBox = new JCheckBox("文字付加する", false)
+    private final JCheckBox clipboardAddPrefixSuffixCheckBox = new JCheckBox("文字付加する", true)
     private final JButton aiMessageButton = new JButton("AI用メッセージ")
     private final JButton copyFilesButton = new JButton("ファイルに出力")
     private final JButton fileListButton = new JButton("ファイル tree 出力")
