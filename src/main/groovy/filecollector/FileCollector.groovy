@@ -47,17 +47,19 @@ class FileCollectorFrame extends JFrame {
     private final DefaultListModel<String> fileListModel = new DefaultListModel<>()
     private final JList<String> fileList = new JList<>(fileListModel)
     private final JButton searchButton = new JButton("<html>ファイル抽出<<br/>(Ctrl+Enter)</html>")
+    private final JCheckBox dedupeByFileNameCheckBox = new JCheckBox("同名ファイル除外", true)
     private final JComboBox<String> outputCountCombo = new JComboBox<>(["5", "10", "20", "50", "100"] as String[])
     private final JButton clipboardOutputButton = new JButton("クリップボード出力")
     private final JTextArea clipboardPrefixField = new JTextArea("# File: #{filepath}\r\n```#{ext}\r\n", 2, 12)
     private final JTextArea clipboardSuffixField = new JTextArea("```\r\n", 2, 12)
-    private final JCheckBox clipboardAddPrefixSuffixCheckBox = new JCheckBox("文字付加する", true)
+    private final JCheckBox clipboardAddPrefixSuffixCheckBox = new JCheckBox("先頭・末尾文字付加", true)
     private final JButton aiMessageButton = new JButton("AI用メッセージ")
     private final JButton copyFilesButton = new JButton("ファイルに出力")
     private final JButton fileListButton = new JButton("ファイル tree 出力")
     private final JButton removeSelectedButton = new JButton("選択削除")
     private final JButton removeExceptSelectedButton = new JButton("選択以外削除")
     private final JCheckBox clearBeforeOutputCheckBox = new JCheckBox("既存ファイル削除", true)
+    private final JLabel resultCountLabel = new JLabel("0 件")
     // 抽出結果のファイル一覧（相対パス表示用の元データ）
     private List<Path> lastFoundFiles = new ArrayList<>()
     // 対象フォルダの履歴（CONFIG_DIR/history.txt に保存）
@@ -213,6 +215,8 @@ class FileCollectorFrame extends JFrame {
         searchButton.setMaximumSize(new Dimension(searchBtnPref.width as int, 40))
         def searchBtnWrap = new JPanel(new BorderLayout())
         searchBtnWrap.add(searchButton, BorderLayout.NORTH)
+        dedupeByFileNameCheckBox.alignmentX = Component.LEFT_ALIGNMENT
+        searchBtnWrap.add(dedupeByFileNameCheckBox, BorderLayout.SOUTH)
         patternRowPanel.add(searchBtnWrap, BorderLayout.EAST)
 
         c.gridx = 0
@@ -231,7 +235,7 @@ class FileCollectorFrame extends JFrame {
         def prefixLabel2 = new JLabel("クリップボード出力")
         prefixLabel2.alignmentY = Component.TOP_ALIGNMENT
         optionsLeft.add(prefixLabel2)
-        optionsLeft.add(Box.createHorizontalStrut(24))
+        optionsLeft.add(Box.createHorizontalStrut(20))
         def prefixLabel = new JLabel("<html>先頭<br/>付加</html>")
         prefixLabel.alignmentY = Component.TOP_ALIGNMENT
         optionsLeft.add(prefixLabel)
@@ -293,6 +297,7 @@ class FileCollectorFrame extends JFrame {
         def resultHeader = new JPanel(new BorderLayout())
         def leftButtonsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0))
         leftButtonsPanel.add(new JLabel("抽出結果"))
+        leftButtonsPanel.add(resultCountLabel)
         leftButtonsPanel.add(removeSelectedButton)
         leftButtonsPanel.add(removeExceptSelectedButton)
         resultHeader.add(leftButtonsPanel, BorderLayout.WEST)
@@ -328,6 +333,7 @@ class FileCollectorFrame extends JFrame {
                 clipboardOutputButton.enabled = hasSelection
             }
         }
+        updateResultCount()
 
         SwingUtilities.invokeLater {
             split.setDividerLocation(0.5d)
@@ -389,6 +395,12 @@ class FileCollectorFrame extends JFrame {
         })
     }
 
+    /** 抽出結果件数ラベルを現在の件数で更新 */
+    private void updateResultCount() {
+        int n = fileListModel.size()
+        resultCountLabel.setText("${n} 件")
+    }
+
     /** 抽出結果リストで選択した行を削除 */
     private void removeSelectedFromResult() {
         int[] indices = fileList.selectedIndices
@@ -402,6 +414,7 @@ class FileCollectorFrame extends JFrame {
         }
         copyFilesButton.enabled = !lastFoundFiles.isEmpty()
         aiMessageButton.enabled = !lastFoundFiles.isEmpty()
+        updateResultCount()
         appendLog("選択した ${indices.length} 件を抽出結果から削除しました。")
     }
 
@@ -422,6 +435,7 @@ class FileCollectorFrame extends JFrame {
         lastFoundFiles.addAll(newPaths)
         copyFilesButton.enabled = !lastFoundFiles.isEmpty()
         aiMessageButton.enabled = !lastFoundFiles.isEmpty()
+        updateResultCount()
         appendLog("選択以外を削除しました。${newModelItems.size()} 件を残しました。")
     }
 
@@ -674,21 +688,35 @@ class FileCollectorFrame extends JFrame {
         appendLog("収集ファイルパターン (glob): ${cleaned.join(', ')}")
 
         // 重い走査は別スレッドで実行（UI フリーズ防止）
+        def dedupeByFileName = dedupeByFileNameCheckBox.selected
         new Thread({
             try {
                 ensureFileListCache(srcDir, false)  // キャッシュが無いときだけファイル一覧を作成
                 def jarFiles = findFilesFromFileList(srcDir, cleaned)
                 def existingSet = new HashSet<Path>(lastFoundFiles)
-                def toAdd = jarFiles.findAll { !existingSet.contains(it) }
+                def existingNames = new HashSet<String>(lastFoundFiles.collect { it.fileName.toString() })
+                def toAdd = []
+                def excludedByName = []  // 同名のため除外（重複除外ON時）
+                for (p in jarFiles) {
+                    if (existingSet.contains(p)) continue
+                    if (dedupeByFileName && existingNames.contains(p.fileName.toString())) {
+                        excludedByName.add(p)
+                        continue
+                    }
+                    toAdd.add(p)
+                    existingNames.add(p.fileName.toString())
+                }
 
                 SwingUtilities.invokeLater {
                     toAdd.each { p ->
                         lastFoundFiles.add(p)
                         fileListModel.addElement(srcDir.relativize(p).toString())
                     }
+                    updateResultCount()
                 }
 
-                appendLog("見つかったファイル数: ${jarFiles.size()}、うち新規 ${toAdd.size()} 件を追加（同一ファイルは追加しない）")
+                appendLog("見つかったファイル数: ${jarFiles.size()}、うち新規 ${toAdd.size()} 件を追加${dedupeByFileName ? '（同名ファイル除外）' : '（同名ファイル追加する）'}")
+                excludedByName.each { appendLog("(除外): ${srcDir.relativize(it).toString().replace('/', '\\')}") }
                 if (jarFiles.isEmpty()) {
                     appendLog("対象ファイルが見つかりませんでした。")
                 }
@@ -732,12 +760,17 @@ class FileCollectorFrame extends JFrame {
             int limit = getOutputCount()
             int toCopy = Math.min(limit, lastFoundFiles.size())
             if (toCopy <= 0) return
+            Map<String, Integer> nameTotalCount = new HashMap<>()
+            toCopy.times { int i ->
+                String nameWithSuffix = fileNameWithSuffix(lastFoundFiles.get(i).fileName.toString(), suffix)
+                nameTotalCount.put(nameWithSuffix, nameTotalCount.getOrDefault(nameWithSuffix, 0) + 1)
+            }
             Map<String, Integer> nameCount = new HashMap<>()
             toCopy.times { int i ->
                 Path file = lastFoundFiles.get(i)
                 String baseFileName = file.fileName.toString()
                 String nameWithSuffix = fileNameWithSuffix(baseFileName, suffix)
-                String destName = uniqueFlatName(nameWithSuffix, nameCount)
+                String destName = uniqueFlatName(nameWithSuffix, nameCount, nameTotalCount)
                 Path dest = outDir.resolve(destName)
                 Files.copy(file, dest, StandardCopyOption.REPLACE_EXISTING)
                 appendLog("コピー: $destName")
@@ -747,6 +780,7 @@ class FileCollectorFrame extends JFrame {
             appendLog("出力フォルダをエクスプローラで表示しました。")
             // 出力したファイルをリストから削除
             toCopy.times { fileListModel.remove(0); lastFoundFiles.remove(0) }
+            updateResultCount()
             copyFilesButton.enabled = !lastFoundFiles.isEmpty()
             aiMessageButton.enabled = !lastFoundFiles.isEmpty()
         } catch (Exception e) {
@@ -945,11 +979,12 @@ class FileCollectorFrame extends JFrame {
         return fileName + suffix
     }
 
-    /** 同名ファイル対策：2件目以降に _2, _3, ... を付与してユニークな出力名を返す */
-    private static String uniqueFlatName(String baseFileName, Map<String, Integer> nameCount) {
+    /** 同名ファイル対策：同名が2件以上あるときだけ (1), (2), ... を付与。1件のみの場合はそのまま返す */
+    private static String uniqueFlatName(String baseFileName, Map<String, Integer> nameCount, Map<String, Integer> nameTotalCount) {
+        int total = nameTotalCount.getOrDefault(baseFileName, 1)
         int count = nameCount.getOrDefault(baseFileName, 0)
         nameCount.put(baseFileName, count + 1)
-        if (count == 0) return baseFileName
+        if (total <= 1) return baseFileName
         int lastDot = baseFileName.lastIndexOf('.')
         String namePart, extPart
         if (lastDot > 0) {
@@ -959,7 +994,7 @@ class FileCollectorFrame extends JFrame {
             namePart = baseFileName
             extPart = ""
         }
-        return namePart + "_" + (count + 1) + extPart
+        return namePart + "(" + (count + 1) + ")" + extPart
     }
 
     /** ログエリアに 1 行追記し、末尾にスクロール */
