@@ -42,6 +42,7 @@ class FileCollectorFrame extends JFrame {
     private final JComboBox<String> sourceDirCombo = new JComboBox<>()   // 対象フォルダ（履歴付き）
     private final JTextField sourceFilterField = new JTextField(20)      // 対象フォルダ履歴フィルタ
     private final JTextArea patternArea = new JTextArea("", 6, 55)       // 抽出条件（glob、複数行可）
+    private final JTextArea excludePatternArea = new JTextArea("", 2, 55) // 除外条件（glob、複数行可）
     private final JTextField fileSuffixField = new JTextField(".txt", 6) // ファイル出力時の拡張子追加文字
     private final JTextArea logArea = new JTextArea()
     private final DefaultListModel<String> fileListModel = new DefaultListModel<>()
@@ -226,6 +227,30 @@ class FileCollectorFrame extends JFrame {
         c.anchor = GridBagConstraints.WEST
         c.fill = GridBagConstraints.HORIZONTAL
         form.add(patternRowPanel, c)
+        c.gridwidth = 1
+
+        // 除外条件（glob パターン、1行1パターン）— 抽出条件行と同じ横幅にそろえる
+        row++
+        def excludeRowPanel = new JPanel(new BorderLayout(4, 0))
+        def excludeLabelPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0))
+        excludeLabelPanel.add(new JLabel("除外条件 (glob)"))
+        excludeLabelPanel.setPreferredSize(new Dimension(patternLabelPanel.getPreferredSize().width as int, excludeLabelPanel.getPreferredSize().height as int))
+        excludeRowPanel.add(excludeLabelPanel, BorderLayout.WEST)
+        excludePatternArea.lineWrap = true
+        excludePatternArea.wrapStyleWord = true
+        excludePatternArea.setToolTipText("ここにマッチしたファイルは抽出結果に含めません。1行1パターン。空欄なら除外なし。")
+        def excludeScroll = new JScrollPane(excludePatternArea)
+        excludeScroll.setMinimumSize(new Dimension(150, 40))
+        excludeRowPanel.add(excludeScroll, BorderLayout.CENTER)
+        def excludeRightSpacer = new JPanel()
+        excludeRightSpacer.setPreferredSize(new Dimension(searchBtnWrap.getPreferredSize().width as int, 1))
+        excludeRowPanel.add(excludeRightSpacer, BorderLayout.EAST)
+        c.gridy = row
+        c.gridwidth = 3
+        c.weightx = 1.0
+        c.anchor = GridBagConstraints.WEST
+        c.fill = GridBagConstraints.HORIZONTAL
+        form.add(excludeRowPanel, c)
         c.gridwidth = 1
 
         // 先頭・末尾・拡張子追加文字（抽出結果行と同様の別 JPanel）
@@ -684,8 +709,10 @@ class FileCollectorFrame extends JFrame {
         aiMessageButton.enabled = false
         logArea.text = ""
 
+        def excludePatterns = excludePatternArea.text?.readLines()?.collect { it.trim() }?.findAll { it } ?: []
         appendLog("抽出開始: $srcDir")
         appendLog("収集ファイルパターン (glob): ${cleaned.join(', ')}")
+        if (excludePatterns) appendLog("除外パターン (glob): ${excludePatterns.join(', ')}")
 
         // 重い走査は別スレッドで実行（UI フリーズ防止）
         def dedupeByFileName = dedupeByFileNameCheckBox.selected
@@ -693,6 +720,21 @@ class FileCollectorFrame extends JFrame {
             try {
                 ensureFileListCache(srcDir, false)  // キャッシュが無いときだけファイル一覧を作成
                 def jarFiles = findFilesFromFileList(srcDir, cleaned)
+                if (excludePatterns) {
+                    def excludeMatchers = excludePatterns.collect { toGlobPattern(it) }.findAll { it }.collect {
+                        FileSystems.default.getPathMatcher("glob:${it}")
+                    }
+                    if (excludeMatchers) {
+                        int before = jarFiles.size()
+                        jarFiles = jarFiles.findAll { Path p ->
+                            Path rel = srcDir.relativize(p)
+                            def segs = normalizePath(rel.toString()).split("/").toList()
+                            Path relNorm = segs ? rel.fileSystem.getPath(*segs) : rel
+                            !excludeMatchers.any { it.matches(relNorm) || it.matches(p.fileName) }
+                        }
+                        appendLog("除外適用: ${before - jarFiles.size()} 件を除外し ${jarFiles.size()} 件")
+                    }
+                }
                 def existingSet = new HashSet<Path>(lastFoundFiles)
                 def existingNames = new HashSet<String>(lastFoundFiles.collect { it.fileName.toString() })
                 def toAdd = []
