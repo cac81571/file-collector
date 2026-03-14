@@ -77,6 +77,12 @@ class FileCollectorFrame extends JFrame {
     private static final Path OUTPUT_COUNT_FILE = CONFIG_DIR.resolve("output-count.txt")
     // 対象フォルダ履歴を保存するファイル（CONFIG_DIR 配下）
     private static final Path SOURCE_HISTORY_FILE = CONFIG_DIR.resolve("history.txt")
+    // フォーム入力の保存（次回起動時に復元）
+    private static final Path PATTERN_FILE = CONFIG_DIR.resolve("pattern.txt")
+    private static final Path EXCLUDE_PATTERN_FILE = CONFIG_DIR.resolve("exclude-pattern.txt")
+    private static final Path CLIPBOARD_PREFIX_FILE = CONFIG_DIR.resolve("clipboard-prefix.txt")
+    private static final Path CLIPBOARD_SUFFIX_FILE = CONFIG_DIR.resolve("clipboard-suffix.txt")
+    private static final Path FILE_SUFFIX_FILE = CONFIG_DIR.resolve("file-suffix.txt")
 
     FileCollectorFrame() {
         super("FileCollector")
@@ -90,11 +96,13 @@ class FileCollectorFrame extends JFrame {
         initLayout()
         loadSourceHistory()
         loadOutputCount()
+        loadFormSettings()
         initActions()
         addWindowListener(new WindowAdapter() {
             @Override
             void windowClosing(WindowEvent e) {
                 addSourceHistory(getSourceDirText())
+                saveFormSettings()
             }
         })
     }
@@ -656,6 +664,45 @@ class FileCollectorFrame extends JFrame {
             applySourceFilter(sourceFilterField.text)
         }
         saveSourceHistory()
+    }
+
+    /** 抽出条件・除外条件・先頭付加・末尾付加・拡張子追加文字を CONFIG_DIR のファイルから読み込み */
+    private void loadFormSettings() {
+        try {
+            if (Files.exists(PATTERN_FILE)) {
+                patternArea.setText(new String(Files.readAllBytes(PATTERN_FILE), StandardCharsets.UTF_8))
+            }
+            if (Files.exists(EXCLUDE_PATTERN_FILE)) {
+                excludePatternArea.setText(new String(Files.readAllBytes(EXCLUDE_PATTERN_FILE), StandardCharsets.UTF_8))
+            }
+            if (Files.exists(CLIPBOARD_PREFIX_FILE)) {
+                clipboardPrefixField.setText(new String(Files.readAllBytes(CLIPBOARD_PREFIX_FILE), StandardCharsets.UTF_8))
+            }
+            if (Files.exists(CLIPBOARD_SUFFIX_FILE)) {
+                clipboardSuffixField.setText(new String(Files.readAllBytes(CLIPBOARD_SUFFIX_FILE), StandardCharsets.UTF_8))
+            }
+            if (Files.exists(FILE_SUFFIX_FILE)) {
+                fileSuffixField.setText(new String(Files.readAllBytes(FILE_SUFFIX_FILE), StandardCharsets.UTF_8).trim())
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** 抽出条件・除外条件・先頭付加・末尾付加・拡張子追加文字を CONFIG_DIR のファイルに保存 */
+    private void saveFormSettings() {
+        try {
+            Files.createDirectories(CONFIG_DIR)
+            writeTextFile(PATTERN_FILE, patternArea.text)
+            writeTextFile(EXCLUDE_PATTERN_FILE, excludePatternArea.text)
+            writeTextFile(CLIPBOARD_PREFIX_FILE, clipboardPrefixField.text)
+            writeTextFile(CLIPBOARD_SUFFIX_FILE, clipboardSuffixField.text)
+            writeTextFile(FILE_SUFFIX_FILE, fileSuffixField.text?.trim() ?: "")
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static void writeTextFile(Path path, String content) {
+        Files.write(path, (content ?: "").getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
     }
 
     /** 対象フォルダを再帰走査し、抽出条件（glob）に合うファイルを一覧表示 */
