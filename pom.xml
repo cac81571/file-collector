@@ -14,58 +14,19 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <groovy.version>3.0.21</groovy.version>
     </properties>
 
     <dependencies>
-        <!-- Groovy コア。標準 JDK（Swing など）は Java 側を使用 -->
-        <dependency>
-            <groupId>org.codehaus.groovy</groupId>
-            <artifactId>groovy</artifactId>
-            <version>${groovy.version}</version>
-        </dependency>
         <!-- FlatLaf: モダンな Swing Look and Feel -->
         <dependency>
             <groupId>com.formdev</groupId>
             <artifactId>flatlaf</artifactId>
             <version>3.4.1</version>
         </dependency>
-        <dependency>
-            <groupId>com.formdev</groupId>
-            <artifactId>flatlaf-intellij-themes</artifactId>
-            <version>3.4</version>
-        </dependency>
-        <!-- FlatLaf Extras: SVG アイコンなど -->
-        <dependency>
-            <groupId>com.formdev</groupId>
-            <artifactId>flatlaf-extras</artifactId>
-            <version>3.4</version>
-        </dependency>
     </dependencies>
 
     <build>
         <plugins>
-            <!-- Groovy ソースをコンパイルするためのプラグイン -->
-            <plugin>
-                <groupId>org.codehaus.gmavenplus</groupId>
-                <artifactId>gmavenplus-plugin</artifactId>
-                <version>4.3.0</version>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>addSources</goal>
-                            <goal>addTestSources</goal>
-                            <goal>generateStubs</goal>
-                            <goal>compile</goal>
-                            <goal>generateTestStubs</goal>
-                            <goal>compileTests</goal>
-                            <goal>removeStubs</goal>
-                            <goal>removeTestStubs</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -110,9 +71,8 @@
             </plugin>
         </plugins>
 
-        <sourceDirectory>src/main/groovy</sourceDirectory>
-        <testSourceDirectory>src/test/groovy</testSourceDirectory>
+        <sourceDirectory>src/main/java</sourceDirectory>
+        <testSourceDirectory>src/test/java</testSourceDirectory>
     </build>
 
 </project>
-
