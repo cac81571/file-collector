@@ -344,8 +344,7 @@ class FileCollectorFrame extends JFrame {
 
         content.add(center, BorderLayout.CENTER)
 
-        copyFilesButton.enabled = false
-        aiMessageButton.enabled = false
+        updateResultListButtons()
         clipboardOutputButton.enabled = false
         removeSelectedButton.enabled = false
         removeExceptSelectedButton.enabled = false
@@ -387,37 +386,16 @@ class FileCollectorFrame extends JFrame {
         removeExceptSelectedButton.addActionListener { removeExceptSelectedFromResult() }
 
         // 対象フォルダ履歴フィルタ: 入力されるたびに部分一致でコンボの候補を絞り込み
-        sourceFilterField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-            @Override
-            void insertUpdate(javax.swing.event.DocumentEvent e) {
-                applySourceFilter(sourceFilterField.text)
-                if (sourceDirCombo.itemCount > 0) {
-                    sourceDirCombo.showPopup()
-                } else {
-                    sourceDirCombo.hidePopup()
-                }
-            }
-
-            @Override
-            void removeUpdate(javax.swing.event.DocumentEvent e) {
-                applySourceFilter(sourceFilterField.text)
-                if (sourceDirCombo.itemCount > 0) {
-                    sourceDirCombo.showPopup()
-                } else {
-                    sourceDirCombo.hidePopup()
-                }
-            }
-
-            @Override
-            void changedUpdate(javax.swing.event.DocumentEvent e) {
-                applySourceFilter(sourceFilterField.text)
-                if (sourceDirCombo.itemCount > 0) {
-                    sourceDirCombo.showPopup()
-                } else {
-                    sourceDirCombo.hidePopup()
-                }
-            }
-        })
+        def onFilterChanged = {
+            applySourceFilter(sourceFilterField.text)
+            if (sourceDirCombo.itemCount > 0) sourceDirCombo.showPopup()
+            else sourceDirCombo.hidePopup()
+        }
+        sourceFilterField.getDocument().addDocumentListener([
+            insertUpdate: { onFilterChanged() },
+            removeUpdate: { onFilterChanged() },
+            changedUpdate: { onFilterChanged() }
+        ] as javax.swing.event.DocumentListener)
     }
 
     /** 抽出結果件数ラベルを現在の件数で更新 */
@@ -437,8 +415,7 @@ class FileCollectorFrame extends JFrame {
                 lastFoundFiles.remove(idx)
             }
         }
-        copyFilesButton.enabled = !lastFoundFiles.isEmpty()
-        aiMessageButton.enabled = !lastFoundFiles.isEmpty()
+        updateResultListButtons()
         updateResultCount()
         appendLog("選択した ${indices.length} 件を抽出結果から削除しました。")
     }
@@ -458,8 +435,7 @@ class FileCollectorFrame extends JFrame {
         newModelItems.each { fileListModel.addElement(it) }
         lastFoundFiles.clear()
         lastFoundFiles.addAll(newPaths)
-        copyFilesButton.enabled = !lastFoundFiles.isEmpty()
-        aiMessageButton.enabled = !lastFoundFiles.isEmpty()
+        updateResultListButtons()
         updateResultCount()
         appendLog("選択以外を削除しました。${newModelItems.size()} 件を残しました。")
     }
@@ -685,14 +661,13 @@ class FileCollectorFrame extends JFrame {
     /** 対象フォルダを再帰走査し、抽出条件（glob）に合うファイルを一覧表示 */
     private void doSearch() {
         def src = getSourceDirText()?.trim()
-        def patterns = patternArea.text?.readLines()
+        def cleaned = parsePatternLines(patternArea.text)
 
         if (!src) {
             showError("対象フォルダを指定してください。")
             return
         }
         addSourceHistory(src)
-        def cleaned = patterns.collect { it.trim() }.findAll { it }
         if (cleaned.isEmpty()) {
             showError("抽出条件を1行以上入力してください。")
             return
@@ -709,7 +684,7 @@ class FileCollectorFrame extends JFrame {
         aiMessageButton.enabled = false
         logArea.text = ""
 
-        def excludePatterns = excludePatternArea.text?.readLines()?.collect { it.trim() }?.findAll { it } ?: []
+        def excludePatterns = parsePatternLines(excludePatternArea.text)
         appendLog("抽出開始: $srcDir")
         appendLog("収集ファイルパターン (glob): ${cleaned.join(', ')}")
         if (excludePatterns) appendLog("除外パターン (glob): ${excludePatterns.join(', ')}")
@@ -721,17 +696,10 @@ class FileCollectorFrame extends JFrame {
                 ensureFileListCache(srcDir, false)  // キャッシュが無いときだけファイル一覧を作成
                 def jarFiles = findFilesFromFileList(srcDir, cleaned)
                 if (excludePatterns) {
-                    def excludeMatchers = excludePatterns.collect { toGlobPattern(it) }.findAll { it }.collect {
-                        FileSystems.default.getPathMatcher("glob:${it}")
-                    }
+                    def excludeMatchers = buildGlobMatchers(excludePatterns)
                     if (excludeMatchers) {
                         int before = jarFiles.size()
-                        jarFiles = jarFiles.findAll { Path p ->
-                            Path rel = srcDir.relativize(p)
-                            def segs = normalizePath(rel.toString()).split("/").toList()
-                            Path relNorm = segs ? rel.fileSystem.getPath(*segs) : rel
-                            !excludeMatchers.any { it.matches(relNorm) || it.matches(p.fileName) }
-                        }
+                        jarFiles = jarFiles.findAll { !pathMatchesAny(srcDir, it, excludeMatchers) }
                         appendLog("除外適用: ${before - jarFiles.size()} 件を除外し ${jarFiles.size()} 件")
                     }
                 }
@@ -771,8 +739,7 @@ class FileCollectorFrame extends JFrame {
             } finally {
                 SwingUtilities.invokeLater {
                     searchButton.enabled = true
-                    copyFilesButton.enabled = !lastFoundFiles.isEmpty()
-                    aiMessageButton.enabled = !lastFoundFiles.isEmpty()
+                    updateResultListButtons()
                 }
             }
         }, "FileCollectorWorker").start()
@@ -823,8 +790,7 @@ class FileCollectorFrame extends JFrame {
             // 出力したファイルをリストから削除
             toCopy.times { fileListModel.remove(0); lastFoundFiles.remove(0) }
             updateResultCount()
-            copyFilesButton.enabled = !lastFoundFiles.isEmpty()
-            aiMessageButton.enabled = !lastFoundFiles.isEmpty()
+            updateResultListButtons()
         } catch (Exception e) {
             appendLog("各ファイル出力中にエラー: ${getErrorMessage(e)}")
             e.printStackTrace()
@@ -837,6 +803,39 @@ class FileCollectorFrame extends JFrame {
     /** パス区切り \ と / を同義として正規化 */
     private static String normalizePath(String path) {
         return path == null ? "" : path.replace("\\", "/")
+    }
+
+    /** 複数行テキストから空白トリム済みの非空行リストを返す（抽出条件・除外条件用） */
+    private static List<String> parsePatternLines(String text) {
+        return text?.readLines()?.collect { it.trim() }?.findAll { it } ?: []
+    }
+
+    /** root に対する相対パスを / 区切り正規化した Path に変換（glob マッチ用） */
+    private static Path relativizeNormalized(Path root, Path p) {
+        Path rel = root.relativize(p)
+        def segs = normalizePath(rel.toString()).split("/").toList()
+        return segs ? rel.fileSystem.getPath(*segs) : rel
+    }
+
+    /** glob パターン文字列のリストから PathMatcher のリストを生成 */
+    private static List<PathMatcher> buildGlobMatchers(List<String> patterns) {
+        return patterns.collect { toGlobPattern(it) }.findAll { it }.collect {
+            FileSystems.default.getPathMatcher("glob:${it}")
+        }
+    }
+
+    /** 指定パスが matchers のいずれかにマッチするか */
+    private static boolean pathMatchesAny(Path root, Path p, List<PathMatcher> matchers) {
+        if (matchers.isEmpty()) return false
+        Path relNorm = relativizeNormalized(root, p)
+        matchers.any { it.matches(relNorm) || it.matches(p.fileName) }
+    }
+
+    /** 抽出結果の有無に応じてコピー・AIボタンの有効状態を更新 */
+    private void updateResultListButtons() {
+        boolean hasResults = !lastFoundFiles.isEmpty()
+        copyFilesButton.enabled = hasResults
+        aiMessageButton.enabled = hasResults
     }
 
     /**
@@ -896,45 +895,30 @@ class FileCollectorFrame extends JFrame {
     /** ファイル一覧キャッシュを読み、glob パターンにマッチするファイルのみ返す（findFiles のキャッシュ版） */
     private List<Path> findFilesFromFileList(Path root, List<String> patterns) {
         Path cachePath = getFileListCachePath(root)
-        if (!Files.exists(cachePath)) {
-            return findFiles(root, patterns)
-        }
-        def globPatterns = patterns.collect { toGlobPattern(it) }.findAll { it }
-        def matchers = globPatterns.collect { pattern ->
-            FileSystems.default.getPathMatcher("glob:${pattern}")
-        }
+        if (!Files.exists(cachePath)) return findFiles(root, patterns)
+        def matchers = buildGlobMatchers(patterns)
         def result = []
         Files.readAllLines(cachePath, StandardCharsets.UTF_8).each { String line ->
             if (!line.trim()) return
             Path p = Paths.get(line)
             if (!Files.isRegularFile(p)) return
-            Path rel = root.relativize(p)
-            def segs = normalizePath(rel.toString()).split("/").toList()
-            Path relNormalized = segs ? rel.getFileSystem().getPath(*segs) : rel
-            if (matchers.any { it.matches(relNormalized) || it.matches(p.fileName) }) {
+            if (pathMatchesAny(root, p, matchers)) {
                 result << p
-                appendLog("追加: ${rel}")
+                appendLog("追加: ${root.relativize(p)}")
             }
         }
         return result
     }
 
-    /** root 以下を再帰走査し、glob パターン（正規化済み）にマッチする通常ファイルを返す（キャッシュ未使用） */
+    /** root 以下を再帰走査し、glob パターンにマッチする通常ファイルを返す（キャッシュ未使用） */
     private List<Path> findFiles(Path root, List<String> patterns) {
-        def globPatterns = patterns.collect { toGlobPattern(it) }.findAll { it }
-        def matchers = globPatterns.collect { pattern ->
-            FileSystems.default.getPathMatcher("glob:${pattern}")
-        }
+        def matchers = buildGlobMatchers(patterns)
         def result = []
         Files.walk(root).forEach { Path p ->
             if (!Files.isRegularFile(p)) return
-            Path rel = root.relativize(p)
-            // Windows でも glob の ** が正しく動くよう、パスを / 区切りに正規化
-            def segs = normalizePath(rel.toString()).split("/").toList()
-            Path relNormalized = segs ? rel.getFileSystem().getPath(*segs) : rel
-            if (matchers.any { it.matches(relNormalized) || it.matches(p.fileName) }) {
+            if (pathMatchesAny(root, p, matchers)) {
                 result << p
-                appendLog("追加: ${rel}")
+                appendLog("追加: ${root.relativize(p)}")
             }
         }
         return result
