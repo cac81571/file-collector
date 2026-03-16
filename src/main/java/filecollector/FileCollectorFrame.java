@@ -38,6 +38,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.stream.Collectors;
 
@@ -77,6 +78,7 @@ public class FileCollectorFrame extends JFrame {
     private final JTextField sourceFilterField = new JTextField(20);
     private final JTextArea patternArea = new JTextArea("", 6, 55);
     private final JTextArea excludePatternArea = new JTextArea("", 2, 55);
+    private final JTextField fileSuffixExcludeExtensionsField = new JTextField("pdf,docx,doc,pptx,ppt,rtf,xlsx,xls,csv,json,txt,md,html,htm,xml", 30);
     private final JTextField fileSuffixField = new JTextField(".txt", 6);
     private final JTextArea logArea = new JTextArea();
     private final DefaultListModel<String> fileListModel = new DefaultListModel<>();
@@ -110,6 +112,10 @@ public class FileCollectorFrame extends JFrame {
     private static final Path CLIPBOARD_PREFIX_FILE = CONFIG_DIR.resolve("clipboard-prefix.txt");
     private static final Path CLIPBOARD_SUFFIX_FILE = CONFIG_DIR.resolve("clipboard-suffix.txt");
     private static final Path FILE_SUFFIX_FILE = CONFIG_DIR.resolve("file-suffix.txt");
+    /** 拡張子追加文字を付加しない拡張子一覧（ドットなし・小文字）。設定ファイル file-suffix-exclude-extensions.txt で定義。 */
+    private static final Path FILE_SUFFIX_EXCLUDE_EXTENSIONS_FILE = CONFIG_DIR.resolve("file-suffix-exclude-extensions.txt");
+
+    private Set<String> fileSuffixExcludeExtensions = new HashSet<>();
 
     public FileCollectorFrame() {
         super("FileCollector");
@@ -148,6 +154,7 @@ public class FileCollectorFrame extends JFrame {
 
         int row = 0;
 
+        c.insets = new Insets(0, 4, 4, 4);
         JPanel sourceRowPanel = new JPanel(new BorderLayout(4, 0));
         JPanel sourceLeftPanel = new JPanel();
         sourceLeftPanel.setLayout(new BoxLayout(sourceLeftPanel, BoxLayout.LINE_AXIS));
@@ -177,12 +184,12 @@ public class FileCollectorFrame extends JFrame {
         c.fill = GridBagConstraints.HORIZONTAL;
         form.add(sourceRowPanel, c);
         c.gridwidth = 1;
+        c.insets = new Insets(4, 4, 4, 4);
 
         row++;
-        JPanel patternRowPanel = new JPanel(new BorderLayout(4, 0));
-        JPanel patternLabelPanel = new JPanel();
-        patternLabelPanel.setLayout(new BoxLayout(patternLabelPanel, BoxLayout.LINE_AXIS));
-        JLabel patternLabel = new JLabel("<html>抽出条件<br/>(glob パターン)</html>");
+        // 抽出条件（左）・除外条件（右）を同一行に、ラベルはテキストエリアの上に配置
+        JPanel patternLabelPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        JLabel patternLabel = new JLabel("抽出条件 (glob パターン)");
         JButton helpIconButton = new JButton();
         helpIconButton.putClientProperty(FlatClientProperties.BUTTON_TYPE, FlatClientProperties.BUTTON_TYPE_HELP);
         helpIconButton.setFocusable(false);
@@ -221,18 +228,34 @@ public class FileCollectorFrame extends JFrame {
                 JOptionPane.showMessageDialog(FileCollectorFrame.this, msg, "抽出条件の説明", JOptionPane.INFORMATION_MESSAGE);
             }
         });
-        patternLabel.setAlignmentY(Component.CENTER_ALIGNMENT);
-        helpIconButton.setAlignmentY(Component.CENTER_ALIGNMENT);
         patternLabelPanel.add(patternLabel);
         patternLabelPanel.add(Box.createHorizontalStrut(4));
         patternLabelPanel.add(helpIconButton);
-        patternRowPanel.add(patternLabelPanel, BorderLayout.WEST);
 
+        JPanel patternLeftPanel = new JPanel(new BorderLayout(4, 2));
+        patternLeftPanel.add(patternLabelPanel, BorderLayout.NORTH);
         JScrollPane patternScroll = new JScrollPane(patternArea);
         patternScroll.setMinimumSize(new Dimension(150, 90));
         patternArea.setLineWrap(true);
         patternArea.setWrapStyleWord(true);
-        patternRowPanel.add(patternScroll, BorderLayout.CENTER);
+        patternLeftPanel.add(patternScroll, BorderLayout.CENTER);
+
+        JPanel excludeLabelPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        excludeLabelPanel.add(new JLabel("除外条件 (glob)"));
+        int excludeLabelTop = Math.max(0, patternLabelPanel.getPreferredSize().height - excludeLabelPanel.getPreferredSize().height);
+        if (excludeLabelTop > 0) {
+            excludeLabelPanel.setBorder(new EmptyBorder(excludeLabelTop, 0, 0, 0));
+        }
+
+        JPanel excludeRightPanel = new JPanel(new BorderLayout(4, 2));
+        excludeRightPanel.add(excludeLabelPanel, BorderLayout.NORTH);
+        excludePatternArea.setLineWrap(true);
+        excludePatternArea.setWrapStyleWord(true);
+        excludePatternArea.setToolTipText("ここにマッチしたファイルは抽出結果に含めません。1行1パターン。空欄なら除外なし。");
+        JScrollPane excludeScroll = new JScrollPane(excludePatternArea);
+        excludeScroll.setMinimumSize(new Dimension(150, 90));
+        excludeRightPanel.add(excludeScroll, BorderLayout.CENTER);
+
         Dimension searchBtnPref = searchButton.getPreferredSize();
         searchButton.setPreferredSize(new Dimension(searchBtnPref.width, 40));
         searchButton.setMaximumSize(new Dimension(searchBtnPref.width, 40));
@@ -240,71 +263,69 @@ public class FileCollectorFrame extends JFrame {
         searchBtnWrap.add(searchButton, BorderLayout.NORTH);
         dedupeByFileNameCheckBox.setAlignmentX(Component.LEFT_ALIGNMENT);
         searchBtnWrap.add(dedupeByFileNameCheckBox, BorderLayout.SOUTH);
-        patternRowPanel.add(searchBtnWrap, BorderLayout.EAST);
+
+        JPanel patternExcludeRowPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints pec = new GridBagConstraints();
+        pec.insets = new Insets(0, 0, 0, 8);
+        pec.fill = GridBagConstraints.BOTH;
+        pec.weightx = 0.5;
+        pec.weighty = 1.0;
+        pec.gridx = 0;
+        pec.gridy = 0;
+        patternExcludeRowPanel.add(patternLeftPanel, pec);
+        pec.weightx = 0.5;
+        pec.gridx = 1;
+        patternExcludeRowPanel.add(excludeRightPanel, pec);
+        pec.weightx = 0.0;
+        pec.fill = GridBagConstraints.NONE;
+        pec.anchor = GridBagConstraints.SOUTH;
+        pec.gridx = 2;
+        patternExcludeRowPanel.add(searchBtnWrap, pec);
 
         c.gridx = 0;
         c.gridy = row;
         c.gridwidth = 3;
         c.weightx = 1.0;
+        c.weighty = 0.0;
         c.anchor = GridBagConstraints.WEST;
-        c.fill = GridBagConstraints.HORIZONTAL;
-        form.add(patternRowPanel, c);
+        c.fill = GridBagConstraints.BOTH;
+        form.add(patternExcludeRowPanel, c);
         c.gridwidth = 1;
+        c.weighty = 0.0;
 
-        row++;
-        JPanel excludeRowPanel = new JPanel(new BorderLayout(4, 0));
-        JPanel excludeLabelPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        excludeLabelPanel.add(new JLabel("除外条件 (glob)"));
-        excludeLabelPanel.setPreferredSize(new Dimension(patternLabelPanel.getPreferredSize().width, excludeLabelPanel.getPreferredSize().height));
-        excludeRowPanel.add(excludeLabelPanel, BorderLayout.WEST);
-        excludePatternArea.setLineWrap(true);
-        excludePatternArea.setWrapStyleWord(true);
-        excludePatternArea.setToolTipText("ここにマッチしたファイルは抽出結果に含めません。1行1パターン。空欄なら除外なし。");
-        JScrollPane excludeScroll = new JScrollPane(excludePatternArea);
-        excludeScroll.setMinimumSize(new Dimension(150, 40));
-        excludeRowPanel.add(excludeScroll, BorderLayout.CENTER);
-        JPanel excludeRightSpacer = new JPanel();
-        excludeRightSpacer.setPreferredSize(new Dimension(searchBtnWrap.getPreferredSize().width, 1));
-        excludeRowPanel.add(excludeRightSpacer, BorderLayout.EAST);
-        c.gridy = row;
-        c.gridwidth = 3;
-        c.weightx = 1.0;
-        c.anchor = GridBagConstraints.WEST;
-        c.fill = GridBagConstraints.HORIZONTAL;
-        form.add(excludeRowPanel, c);
-        c.gridwidth = 1;
-
-        JPanel optionsRow = new JPanel(new BorderLayout());
-        JPanel optionsLeft = new JPanel();
-        optionsLeft.setLayout(new BoxLayout(optionsLeft, BoxLayout.LINE_AXIS));
+        JPanel optionsRow = new JPanel(new BorderLayout(8, 0));
+        JPanel optionsWest = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         JLabel prefixLabel2 = new JLabel("クリップボード出力");
         prefixLabel2.setAlignmentY(Component.TOP_ALIGNMENT);
-        optionsLeft.add(prefixLabel2);
-        optionsLeft.add(Box.createHorizontalStrut(20));
+        optionsWest.add(prefixLabel2);
+        optionsWest.add(Box.createHorizontalStrut(20));
         JLabel prefixLabel = new JLabel("<html>先頭<br/>付加</html>");
         prefixLabel.setAlignmentY(Component.TOP_ALIGNMENT);
-        optionsLeft.add(prefixLabel);
-        optionsLeft.add(Box.createHorizontalStrut(4));
+        optionsWest.add(prefixLabel);
+        optionsWest.add(Box.createHorizontalStrut(4));
         clipboardPrefixField.setToolTipText("クリップボード出力時にファイルの先頭に追加。#{ext} #{filename} #{filepath} で置換");
         clipboardPrefixField.setLineWrap(true);
         clipboardPrefixField.setWrapStyleWord(true);
         JScrollPane prefixScroll = new JScrollPane(clipboardPrefixField);
-        prefixScroll.setPreferredSize(new Dimension(240, 40));
-        prefixScroll.setAlignmentY(Component.TOP_ALIGNMENT);
-        optionsLeft.add(prefixScroll);
-        optionsLeft.add(Box.createHorizontalStrut(8));
+        prefixScroll.setPreferredSize(new Dimension(200, 40));
+        prefixScroll.setMinimumSize(new Dimension(80, 40));
+        optionsRow.add(optionsWest, BorderLayout.WEST);
+        optionsRow.add(prefixScroll, BorderLayout.CENTER);
+
+        JPanel optionsEast = new JPanel();
+        optionsEast.setLayout(new BoxLayout(optionsEast, BoxLayout.LINE_AXIS));
         JLabel suffixLabel = new JLabel("<html>末尾<br/>付加</html>");
         suffixLabel.setAlignmentY(Component.TOP_ALIGNMENT);
-        optionsLeft.add(suffixLabel);
-        optionsLeft.add(Box.createHorizontalStrut(4));
+        optionsEast.add(suffixLabel);
+        optionsEast.add(Box.createHorizontalStrut(4));
         clipboardSuffixField.setToolTipText("クリップボード出力時にファイルの末尾に追加。${ext} ${filename} ${filepath} で置換");
         clipboardSuffixField.setLineWrap(true);
         clipboardSuffixField.setWrapStyleWord(true);
         JScrollPane suffixScroll = new JScrollPane(clipboardSuffixField);
         suffixScroll.setPreferredSize(new Dimension(240, 40));
         suffixScroll.setAlignmentY(Component.TOP_ALIGNMENT);
-        optionsLeft.add(suffixScroll);
-        optionsLeft.add(Box.createHorizontalStrut(8));
+        optionsEast.add(suffixScroll);
+        optionsEast.add(Box.createHorizontalStrut(8));
         JPanel clipboardButtonPanel = new JPanel();
         clipboardButtonPanel.setLayout(new BoxLayout(clipboardButtonPanel, BoxLayout.Y_AXIS));
         clipboardOutputButton.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -312,15 +333,22 @@ public class FileCollectorFrame extends JFrame {
         clipboardAddPrefixSuffixCheckBox.setAlignmentX(Component.LEFT_ALIGNMENT);
         clipboardButtonPanel.add(clipboardAddPrefixSuffixCheckBox);
         clipboardButtonPanel.setAlignmentY(Component.TOP_ALIGNMENT);
-        optionsLeft.add(clipboardButtonPanel);
+        optionsEast.add(clipboardButtonPanel);
 
         updateClipboardPrefixSuffixEnabled();
-        optionsRow.add(optionsLeft, BorderLayout.WEST);
+        optionsRow.add(optionsEast, BorderLayout.EAST);
+
+        JPanel excludeExtRowPanel = new JPanel(new BorderLayout(8, 0));
+        excludeExtRowPanel.setBorder(new EmptyBorder(10, 0, 0, 0));
+        excludeExtRowPanel.add(new JLabel("拡張子追加 対象外"), BorderLayout.WEST);
+        fileSuffixExcludeExtensionsField.setToolTipText("ファイル出力時に拡張子追加文字を付加しない拡張子。カンマ区切り、ドットなし（例: java, md, txt）");
+        excludeExtRowPanel.add(fileSuffixExcludeExtensionsField, BorderLayout.CENTER);
 
         JPanel topPanel = new JPanel();
         topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
         topPanel.add(form);
         topPanel.add(optionsRow);
+        topPanel.add(excludeExtRowPanel);
         content.add(topPanel, BorderLayout.NORTH);
 
         logArea.setEditable(false);
@@ -669,7 +697,27 @@ public class FileCollectorFrame extends JFrame {
             if (Files.exists(FILE_SUFFIX_FILE)) {
                 fileSuffixField.setText(new String(Files.readAllBytes(FILE_SUFFIX_FILE), StandardCharsets.UTF_8).trim());
             }
+            if (Files.exists(FILE_SUFFIX_EXCLUDE_EXTENSIONS_FILE)) {
+                List<String> exts = new ArrayList<>();
+                for (String line : Files.readAllLines(FILE_SUFFIX_EXCLUDE_EXTENSIONS_FILE, StandardCharsets.UTF_8)) {
+                    for (String part : line.split("[,]")) {
+                        String ext = part.trim();
+                        if (!ext.isEmpty() && !ext.startsWith("#")) exts.add(ext);
+                    }
+                }
+                fileSuffixExcludeExtensionsField.setText(String.join(", ", exts));
+            }
+            updateFileSuffixExcludeExtensionsFromField();
         } catch (Exception ignored) {
+        }
+    }
+
+    private void updateFileSuffixExcludeExtensionsFromField() {
+        fileSuffixExcludeExtensions.clear();
+        for (String part : fileSuffixExcludeExtensionsField.getText().split("[,]")) {
+            String ext = part.trim();
+            if (ext.isEmpty()) continue;
+            fileSuffixExcludeExtensions.add(ext.toLowerCase());
         }
     }
 
@@ -682,6 +730,8 @@ public class FileCollectorFrame extends JFrame {
             writeTextFile(CLIPBOARD_SUFFIX_FILE, clipboardSuffixField.getText());
             String suffix = fileSuffixField.getText();
             writeTextFile(FILE_SUFFIX_FILE, (suffix != null && !suffix.trim().isEmpty()) ? suffix.trim() : "");
+            String excludeExts = fileSuffixExcludeExtensionsField.getText();
+            writeTextFile(FILE_SUFFIX_EXCLUDE_EXTENSIONS_FILE, excludeExts != null ? excludeExts.trim() : "");
         } catch (Exception ignored) {
         }
     }
@@ -799,6 +849,7 @@ public class FileCollectorFrame extends JFrame {
         else suffix = "";
         Path outDir = FILE_OUTPUT_DIR;
         try {
+            updateFileSuffixExcludeExtensionsFromField();
             if (clearBeforeOutputCheckBox.isSelected() && Files.exists(outDir)) {
                 Files.walk(outDir).sorted(Comparator.reverseOrder()).forEach(p -> {
                     try {
@@ -1060,8 +1111,15 @@ public class FileCollectorFrame extends JFrame {
         }
     }
 
-    private static String fileNameWithSuffix(String fileName, String suffix) {
+    private String fileNameWithSuffix(String fileName, String suffix) {
         if (suffix == null || suffix.isEmpty()) return fileName;
+        if (!fileSuffixExcludeExtensions.isEmpty()) {
+            int lastDot = fileName.lastIndexOf('.');
+            if (lastDot > 0 && lastDot < fileName.length() - 1) {
+                String ext = fileName.substring(lastDot + 1).toLowerCase();
+                if (fileSuffixExcludeExtensions.contains(ext)) return fileName;
+            }
+        }
         return fileName + suffix;
     }
 
