@@ -21,7 +21,6 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -50,7 +49,6 @@ import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.ComboBoxEditor;
 import javax.swing.JComponent;
-import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -67,15 +65,17 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.event.ListSelectionEvent;
-import javax.swing.event.ListSelectionListener;
 
 import com.formdev.flatlaf.FlatClientProperties;
-import com.formdev.flatlaf.FlatLightLaf;
 
 public class FileCollectorFrame extends JFrame {
 
-    private final JComboBox<String> sourceDirCombo = new JComboBox<>();
-    private final JTextField sourceFilterField = new JTextField(20);
+    private final JComboBox<String> sourceDirComboA = new JComboBox<>();
+    private final JComboBox<String> sourceDirComboB = new JComboBox<>();
+    private final JTextField sourceTitleFieldA = new JTextField("移行前", 8);
+    private final JTextField sourceTitleFieldB = new JTextField("移行後", 8);
+    private final JTextField sourceFilterFieldA = new JTextField(20);
+    private final JTextField sourceFilterFieldB = new JTextField(20);
     private final JTextArea patternArea = new JTextArea("", 6, 55);
     private final JTextArea excludePatternArea = new JTextArea("", 2, 55);
     private final JTextField fileSuffixExcludeExtensionsField = new JTextField("pdf,docx,doc,pptx,ppt,rtf,xlsx,xls,csv,json,txt,md,html,htm,xml", 30);
@@ -92,13 +92,14 @@ public class FileCollectorFrame extends JFrame {
     private final JCheckBox clipboardAddPrefixSuffixCheckBox = new JCheckBox("先頭・末尾文字付加", true);
     private final JButton aiMessageButton = new JButton("AI用メッセージ");
     private final JButton copyFilesButton = new JButton("ファイルに出力");
-    private final JButton fileListButton = new JButton("ファイル tree 出力");
+    private final JButton fileListButton = new JButton("tree 出力");
     private final JButton removeSelectedButton = new JButton("選択削除");
     private final JButton removeExceptSelectedButton = new JButton("選択以外削除");
     private final JCheckBox clearBeforeOutputCheckBox = new JCheckBox("既存ファイル削除", true);
     private final JLabel resultCountLabel = new JLabel("0 件");
 
     private List<Path> lastFoundFiles = new ArrayList<>();
+    private List<Path> lastFoundRoots = new ArrayList<>();
     private final List<String> sourceHistory = new ArrayList<>();
 
     private static final Path CONFIG_DIR = Paths.get(System.getProperty("user.home"), ".filecollector");
@@ -107,11 +108,15 @@ public class FileCollectorFrame extends JFrame {
     private static final Path TREE_OUTPUT_DIR = CONFIG_DIR.resolve("FileCollectorTree");
     private static final Path OUTPUT_COUNT_FILE = CONFIG_DIR.resolve("output-count.txt");
     private static final Path SOURCE_HISTORY_FILE = CONFIG_DIR.resolve("history.txt");
+    private static final Path SOURCE_LAST_A_FILE = CONFIG_DIR.resolve("source-last-a.txt");
+    private static final Path SOURCE_LAST_B_FILE = CONFIG_DIR.resolve("source-last-b.txt");
     private static final Path PATTERN_FILE = CONFIG_DIR.resolve("pattern.txt");
     private static final Path EXCLUDE_PATTERN_FILE = CONFIG_DIR.resolve("exclude-pattern.txt");
     private static final Path CLIPBOARD_PREFIX_FILE = CONFIG_DIR.resolve("clipboard-prefix.txt");
     private static final Path CLIPBOARD_SUFFIX_FILE = CONFIG_DIR.resolve("clipboard-suffix.txt");
     private static final Path FILE_SUFFIX_FILE = CONFIG_DIR.resolve("file-suffix.txt");
+    private static final Path SOURCE_TITLE_A_FILE = CONFIG_DIR.resolve("source-title-a.txt");
+    private static final Path SOURCE_TITLE_B_FILE = CONFIG_DIR.resolve("source-title-b.txt");
     /** 拡張子追加文字を付加しない拡張子一覧（ドットなし・小文字）。設定ファイル file-suffix-exclude-extensions.txt で定義。 */
     private static final Path FILE_SUFFIX_EXCLUDE_EXTENSIONS_FILE = CONFIG_DIR.resolve("file-suffix-exclude-extensions.txt");
 
@@ -133,7 +138,10 @@ public class FileCollectorFrame extends JFrame {
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
-                addSourceHistory(getSourceDirText());
+                addSourceHistory(getSourceDirTextA());
+                addSourceHistory(getSourceDirTextB());
+                saveLastSourceSelection(SOURCE_LAST_A_FILE, getSourceDirTextA());
+                saveLastSourceSelection(SOURCE_LAST_B_FILE, getSourceDirTextB());
                 saveFormSettings();
             }
         });
@@ -155,26 +163,64 @@ public class FileCollectorFrame extends JFrame {
         int row = 0;
 
         c.insets = new Insets(0, 4, 4, 4);
+        JPanel sourceRowsPanel = new JPanel();
+        sourceRowsPanel.setLayout(new BoxLayout(sourceRowsPanel, BoxLayout.Y_AXIS));
         JPanel sourceRowPanel = new JPanel(new BorderLayout(4, 0));
         JPanel sourceLeftPanel = new JPanel();
         sourceLeftPanel.setLayout(new BoxLayout(sourceLeftPanel, BoxLayout.LINE_AXIS));
-        JLabel sourceLabel = new JLabel("対象フォルダ");
+        JLabel sourceLabel = new JLabel("フォルダA");
         sourceLabel.setHorizontalAlignment(SwingConstants.RIGHT);
         sourceLabel.setAlignmentY(Component.CENTER_ALIGNMENT);
-        sourceFilterField.setColumns(15);
-        sourceFilterField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "フィルタ条件（部分一致）");
-        sourceFilterField.setAlignmentY(Component.CENTER_ALIGNMENT);
+        sourceFilterFieldA.setColumns(15);
+        sourceFilterFieldA.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "フィルタ条件（部分一致）");
+        sourceFilterFieldA.setAlignmentY(Component.CENTER_ALIGNMENT);
         sourceLeftPanel.add(sourceLabel);
         sourceLeftPanel.add(Box.createHorizontalStrut(6));
-        sourceLeftPanel.add(sourceFilterField);
+        sourceTitleFieldA.setToolTipText("抽出結果の先頭ラベルに表示するタイトル");
+        sourceLeftPanel.add(sourceTitleFieldA);
+        sourceLeftPanel.add(Box.createHorizontalStrut(6));
+        sourceLeftPanel.add(sourceFilterFieldA);
         sourceRowPanel.add(sourceLeftPanel, BorderLayout.WEST);
 
         JPanel sourceCenterPanel = new JPanel(new BorderLayout(4, 0));
-        sourceDirCombo.setEditable(true);
-        sourceDirCombo.setPreferredSize(new Dimension(500, sourceDirCombo.getPreferredSize().height));
-        sourceCenterPanel.add(sourceDirCombo, BorderLayout.CENTER);
-        sourceCenterPanel.add(fileListButton, BorderLayout.EAST);
+        sourceDirComboA.setEditable(true);
+        sourceDirComboA.setPreferredSize(new Dimension(500, sourceDirComboA.getPreferredSize().height));
+        sourceCenterPanel.add(sourceDirComboA, BorderLayout.CENTER);
         sourceRowPanel.add(sourceCenterPanel, BorderLayout.CENTER);
+        sourceRowsPanel.add(sourceRowPanel);
+        JPanel sourceRowPanelB = new JPanel(new BorderLayout(4, 0));
+        JPanel sourceLeftPanelB = new JPanel();
+        sourceLeftPanelB.setLayout(new BoxLayout(sourceLeftPanelB, BoxLayout.LINE_AXIS));
+        JLabel sourceLabelB = new JLabel("フォルダB");
+        sourceLabelB.setHorizontalAlignment(SwingConstants.RIGHT);
+        sourceLabelB.setAlignmentY(Component.CENTER_ALIGNMENT);
+        sourceLeftPanelB.add(sourceLabelB);
+        sourceLeftPanelB.add(Box.createHorizontalStrut(6));
+        sourceTitleFieldB.setToolTipText("抽出結果の先頭ラベルに表示するタイトル");
+        sourceLeftPanelB.add(sourceTitleFieldB);
+        sourceLeftPanelB.add(Box.createHorizontalStrut(6));
+        sourceFilterFieldB.setColumns(15);
+        sourceFilterFieldB.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "フィルタ条件（部分一致）");
+        sourceFilterFieldB.setAlignmentY(Component.CENTER_ALIGNMENT);
+        sourceLeftPanelB.add(sourceFilterFieldB);
+        sourceRowPanelB.add(sourceLeftPanelB, BorderLayout.WEST);
+
+        JPanel sourceCenterPanelB = new JPanel(new BorderLayout(4, 0));
+        sourceDirComboB.setEditable(true);
+        sourceDirComboB.setPreferredSize(new Dimension(500, sourceDirComboB.getPreferredSize().height));
+        sourceCenterPanelB.add(sourceDirComboB, BorderLayout.CENTER);
+        sourceRowPanelB.add(sourceCenterPanelB, BorderLayout.CENTER);
+        sourceRowsPanel.add(Box.createVerticalStrut(4));
+        sourceRowsPanel.add(sourceRowPanelB);
+
+        Dimension treeBtnPref = fileListButton.getPreferredSize();
+        fileListButton.setPreferredSize(new Dimension(treeBtnPref.width, 46));
+        fileListButton.setMaximumSize(new Dimension(treeBtnPref.width, 46));
+        JPanel sourceGroupPanel = new JPanel(new BorderLayout(4, 0));
+        sourceGroupPanel.add(sourceRowsPanel, BorderLayout.CENTER);
+        JPanel sourceButtonWrap = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+        sourceButtonWrap.add(fileListButton);
+        sourceGroupPanel.add(sourceButtonWrap, BorderLayout.EAST);
 
         c.gridx = 0;
         c.gridy = row;
@@ -182,7 +228,7 @@ public class FileCollectorFrame extends JFrame {
         c.weightx = 1.0;
         c.anchor = GridBagConstraints.WEST;
         c.fill = GridBagConstraints.HORIZONTAL;
-        form.add(sourceRowPanel, c);
+        form.add(sourceGroupPanel, c);
         c.gridwidth = 1;
         c.insets = new Insets(4, 4, 4, 4);
 
@@ -303,7 +349,7 @@ public class FileCollectorFrame extends JFrame {
         prefixLabel.setAlignmentY(Component.TOP_ALIGNMENT);
         optionsWest.add(prefixLabel);
         optionsWest.add(Box.createHorizontalStrut(4));
-        clipboardPrefixField.setToolTipText("クリップボード出力時にファイルの先頭に追加。#{ext} #{filename} #{filepath} で置換");
+        clipboardPrefixField.setToolTipText("クリップボード出力時にファイルの先頭に追加。#{title} #{ext} #{filename} #{filepath} で置換");
         clipboardPrefixField.setLineWrap(true);
         clipboardPrefixField.setWrapStyleWord(true);
         JScrollPane prefixScroll = new JScrollPane(clipboardPrefixField);
@@ -318,7 +364,7 @@ public class FileCollectorFrame extends JFrame {
         suffixLabel.setAlignmentY(Component.TOP_ALIGNMENT);
         optionsEast.add(suffixLabel);
         optionsEast.add(Box.createHorizontalStrut(4));
-        clipboardSuffixField.setToolTipText("クリップボード出力時にファイルの末尾に追加。${ext} ${filename} ${filepath} で置換");
+        clipboardSuffixField.setToolTipText("クリップボード出力時にファイルの末尾に追加。#{title} #{ext} #{filename} #{filepath} で置換");
         clipboardSuffixField.setLineWrap(true);
         clipboardSuffixField.setWrapStyleWord(true);
         JScrollPane suffixScroll = new JScrollPane(clipboardSuffixField);
@@ -421,21 +467,38 @@ public class FileCollectorFrame extends JFrame {
         removeSelectedButton.addActionListener(evt -> removeSelectedFromResult());
         removeExceptSelectedButton.addActionListener(evt -> removeExceptSelectedFromResult());
 
-        Runnable onFilterChanged = () -> {
-            applySourceFilter(sourceFilterField.getText());
-            if (sourceDirCombo.getItemCount() > 0) {
-                sourceDirCombo.showPopup();
+        Runnable onFilterAChanged = () -> {
+            applySourceFilter(sourceFilterFieldA.getText(), sourceDirComboA, sourceHistory);
+            if (sourceDirComboA.getItemCount() > 0) {
+                sourceDirComboA.showPopup();
             } else {
-                sourceDirCombo.hidePopup();
+                sourceDirComboA.hidePopup();
             }
         };
-        sourceFilterField.getDocument().addDocumentListener(new DocumentListener() {
+        sourceFilterFieldA.getDocument().addDocumentListener(new DocumentListener() {
             @Override
-            public void insertUpdate(DocumentEvent e) { onFilterChanged.run(); }
+            public void insertUpdate(DocumentEvent e) { onFilterAChanged.run(); }
             @Override
-            public void removeUpdate(DocumentEvent e) { onFilterChanged.run(); }
+            public void removeUpdate(DocumentEvent e) { onFilterAChanged.run(); }
             @Override
-            public void changedUpdate(DocumentEvent e) { onFilterChanged.run(); }
+            public void changedUpdate(DocumentEvent e) { onFilterAChanged.run(); }
+        });
+
+        Runnable onFilterBChanged = () -> {
+            applySourceFilter(sourceFilterFieldB.getText(), sourceDirComboB, sourceHistory);
+            if (sourceDirComboB.getItemCount() > 0) {
+                sourceDirComboB.showPopup();
+            } else {
+                sourceDirComboB.hidePopup();
+            }
+        };
+        sourceFilterFieldB.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) { onFilterBChanged.run(); }
+            @Override
+            public void removeUpdate(DocumentEvent e) { onFilterBChanged.run(); }
+            @Override
+            public void changedUpdate(DocumentEvent e) { onFilterBChanged.run(); }
         });
     }
 
@@ -452,6 +515,9 @@ public class FileCollectorFrame extends JFrame {
             fileListModel.remove(idx);
             if (idx < lastFoundFiles.size()) {
                 lastFoundFiles.remove(idx);
+                if (idx < lastFoundRoots.size()) {
+                    lastFoundRoots.remove(idx);
+                }
             }
         }
         updateResultListButtons();
@@ -475,12 +541,20 @@ public class FileCollectorFrame extends JFrame {
                 newPaths.add(lastFoundFiles.get(idx));
             }
         }
+        List<Path> newRoots = new ArrayList<>();
+        for (int idx : selectedIndicesList) {
+            if (idx < lastFoundRoots.size()) {
+                newRoots.add(lastFoundRoots.get(idx));
+            }
+        }
         fileListModel.clear();
         for (String it : newModelItems) {
             fileListModel.addElement(it);
         }
         lastFoundFiles.clear();
         lastFoundFiles.addAll(newPaths);
+        lastFoundRoots.clear();
+        lastFoundRoots.addAll(newRoots);
         updateResultListButtons();
         updateResultCount();
         appendLog("選択以外を削除しました。" + newModelItems.size() + " 件を残しました。");
@@ -495,13 +569,10 @@ public class FileCollectorFrame extends JFrame {
     private void doClipboardOutput() {
         int[] indices = fileList.getSelectedIndices();
         if (indices == null || indices.length == 0) return;
-        String baseDirStr = getSourceDirText();
-        if (baseDirStr != null) baseDirStr = baseDirStr.trim();
-        if (baseDirStr == null || baseDirStr.isEmpty()) {
-            showError("対象フォルダを指定してください。");
+        if (lastFoundRoots.size() != lastFoundFiles.size()) {
+            showError("抽出結果の内部状態が不正です。再抽出してください。");
             return;
         }
-        Path baseDir = Paths.get(baseDirStr);
         boolean addPrefixSuffix = clipboardAddPrefixSuffixCheckBox.isSelected();
         String prefixTemplate = addPrefixSuffix ? (clipboardPrefixField.getText() != null ? clipboardPrefixField.getText() : "") : "";
         String suffixTemplate = addPrefixSuffix ? (clipboardSuffixField.getText() != null ? clipboardSuffixField.getText() : "") : "";
@@ -511,11 +582,13 @@ public class FileCollectorFrame extends JFrame {
         for (int idx : sortedIndices) {
             if (idx >= lastFoundFiles.size()) continue;
             Path path = lastFoundFiles.get(idx);
+            Path baseDir = lastFoundRoots.get(idx);
             try {
                 String content = Files.readString(path, StandardCharsets.UTF_8);
                 if (!parts.isEmpty()) parts.add("");
-                String prefix = addPrefixSuffix ? applyClipboardPlaceholders(prefixTemplate, path, baseDir) : "";
-                String suffix = addPrefixSuffix ? applyClipboardPlaceholders(suffixTemplate, path, baseDir) : "";
+                String title = getSourceTitleForRoot(baseDir);
+                String prefix = addPrefixSuffix ? applyClipboardPlaceholders(prefixTemplate, path, baseDir, title) : "";
+                String suffix = addPrefixSuffix ? applyClipboardPlaceholders(suffixTemplate, path, baseDir, title) : "";
                 parts.add(prefix + content + suffix);
             } catch (Exception e) {
                 skipped[0]++;
@@ -563,7 +636,7 @@ public class FileCollectorFrame extends JFrame {
         }
     }
 
-    private static String applyClipboardPlaceholders(String template, Path path, Path baseDir) {
+    private static String applyClipboardPlaceholders(String template, Path path, Path baseDir, String title) {
         if (template == null || template.isEmpty()) return "";
         String fileName = path.getFileName() != null ? path.getFileName().toString() : "";
         String ext = "";
@@ -571,15 +644,52 @@ public class FileCollectorFrame extends JFrame {
         if (dotIdx > 0) ext = fileName.substring(dotIdx + 1);
         String relativePath = baseDir.relativize(path).toString().replace('\\', '/');
         return template
+                .replaceAll("#\\{title\\}", Matcher.quoteReplacement(title != null ? title : ""))
                 .replaceAll("#\\{ext\\}", Matcher.quoteReplacement(ext))
                 .replaceAll("#\\{filename\\}", Matcher.quoteReplacement(fileName))
                 .replaceAll("#\\{filepath\\}", Matcher.quoteReplacement(relativePath));
     }
 
-    private String getSourceDirText() {
-        ComboBoxEditor editor = sourceDirCombo.getEditor();
+    private String getSourceDirTextA() {
+        ComboBoxEditor editor = sourceDirComboA.getEditor();
         Object item = editor != null ? editor.getItem() : null;
         return item != null ? item.toString() : null;
+    }
+
+    private String getSourceDirTextB() {
+        ComboBoxEditor editor = sourceDirComboB.getEditor();
+        Object item = editor != null ? editor.getItem() : null;
+        return item != null ? item.toString() : null;
+    }
+
+    private String getSourceTitleA() {
+        String v = sourceTitleFieldA.getText();
+        return (v != null && !v.trim().isEmpty()) ? v.trim() : "フォルダA";
+    }
+
+    private String getSourceTitleB() {
+        String v = sourceTitleFieldB.getText();
+        return (v != null && !v.trim().isEmpty()) ? v.trim() : "フォルダB";
+    }
+
+    private String getSourceTitleForRoot(Path root) {
+        if (root == null) return "フォルダ";
+        try {
+            Path normalizedRoot = root.toAbsolutePath().normalize();
+            String srcA = getSourceDirTextA();
+            if (srcA != null && !srcA.trim().isEmpty()) {
+                Path pathA = Paths.get(srcA.trim()).toAbsolutePath().normalize();
+                if (normalizedRoot.equals(pathA)) return getSourceTitleA();
+            }
+            String srcB = getSourceDirTextB();
+            if (srcB != null && !srcB.trim().isEmpty()) {
+                Path pathB = Paths.get(srcB.trim()).toAbsolutePath().normalize();
+                if (normalizedRoot.equals(pathB)) return getSourceTitleB();
+            }
+        } catch (Exception ignored) {
+        }
+        String rootName = root.getFileName() != null ? root.getFileName().toString() : "フォルダ";
+        return (rootName != null && !rootName.isEmpty()) ? rootName : "フォルダ";
     }
 
     private static boolean isExistingDirectory(String path) {
@@ -600,8 +710,11 @@ public class FileCollectorFrame extends JFrame {
                         sourceHistory.add(v);
                     }
                 }
-                applySourceFilter("");
             }
+            applySourceFilter(sourceFilterFieldA.getText(), sourceDirComboA, sourceHistory);
+            applySourceFilter(sourceFilterFieldB.getText(), sourceDirComboB, sourceHistory);
+            loadLastSourceSelection(SOURCE_LAST_A_FILE, sourceDirComboA);
+            loadLastSourceSelection(SOURCE_LAST_B_FILE, sourceDirComboB);
         } catch (Exception ignored) {
         }
     }
@@ -660,12 +773,12 @@ public class FileCollectorFrame extends JFrame {
         }
     }
 
-    private void applySourceFilter(String filterText) {
+    private void applySourceFilter(String filterText, JComboBox<String> targetCombo, List<String> sourceHistory) {
         String filter = (filterText != null && !filterText.trim().isEmpty()) ? filterText.trim().toLowerCase() : "";
-        sourceDirCombo.removeAllItems();
+        targetCombo.removeAllItems();
         for (String v : sourceHistory) {
             if (filter.isEmpty() || v.toLowerCase().contains(filter)) {
-                sourceDirCombo.addItem(v);
+                targetCombo.addItem(v);
             }
         }
     }
@@ -675,9 +788,29 @@ public class FileCollectorFrame extends JFrame {
         if (v == null || v.isEmpty() || !isExistingDirectory(v)) return;
         if (!sourceHistory.contains(v)) {
             sourceHistory.add(0, v);
-            applySourceFilter(sourceFilterField.getText());
+            applySourceFilter(sourceFilterFieldA.getText(), sourceDirComboA, sourceHistory);
+            applySourceFilter(sourceFilterFieldB.getText(), sourceDirComboB, sourceHistory);
         }
         saveSourceHistory();
+    }
+
+    private void saveLastSourceSelection(Path file, String value) {
+        try {
+            Files.createDirectories(CONFIG_DIR);
+            writeTextFile(file, value != null ? value.trim() : "");
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void loadLastSourceSelection(Path file, JComboBox<String> combo) {
+        try {
+            if (!Files.exists(file)) return;
+            String value = new String(Files.readAllBytes(file), StandardCharsets.UTF_8).trim();
+            if (!value.isEmpty()) {
+                combo.getEditor().setItem(value);
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     private void loadFormSettings() {
@@ -696,6 +829,12 @@ public class FileCollectorFrame extends JFrame {
             }
             if (Files.exists(FILE_SUFFIX_FILE)) {
                 fileSuffixField.setText(new String(Files.readAllBytes(FILE_SUFFIX_FILE), StandardCharsets.UTF_8).trim());
+            }
+            if (Files.exists(SOURCE_TITLE_A_FILE)) {
+                sourceTitleFieldA.setText(new String(Files.readAllBytes(SOURCE_TITLE_A_FILE), StandardCharsets.UTF_8).trim());
+            }
+            if (Files.exists(SOURCE_TITLE_B_FILE)) {
+                sourceTitleFieldB.setText(new String(Files.readAllBytes(SOURCE_TITLE_B_FILE), StandardCharsets.UTF_8).trim());
             }
             if (Files.exists(FILE_SUFFIX_EXCLUDE_EXTENSIONS_FILE)) {
                 List<String> exts = new ArrayList<>();
@@ -730,6 +869,10 @@ public class FileCollectorFrame extends JFrame {
             writeTextFile(CLIPBOARD_SUFFIX_FILE, clipboardSuffixField.getText());
             String suffix = fileSuffixField.getText();
             writeTextFile(FILE_SUFFIX_FILE, (suffix != null && !suffix.trim().isEmpty()) ? suffix.trim() : "");
+            String sourceTitleA = sourceTitleFieldA.getText();
+            String sourceTitleB = sourceTitleFieldB.getText();
+            writeTextFile(SOURCE_TITLE_A_FILE, sourceTitleA != null ? sourceTitleA.trim() : "");
+            writeTextFile(SOURCE_TITLE_B_FILE, sourceTitleB != null ? sourceTitleB.trim() : "");
             String excludeExts = fileSuffixExcludeExtensionsField.getText();
             writeTextFile(FILE_SUFFIX_EXCLUDE_EXTENSIONS_FILE, excludeExts != null ? excludeExts.trim() : "");
         } catch (Exception ignored) {
@@ -741,24 +884,46 @@ public class FileCollectorFrame extends JFrame {
     }
 
     private void doSearch() {
-        String src = getSourceDirText();
-        if (src != null) src = src.trim();
+        String srcA = getSourceDirTextA();
+        if (srcA != null) srcA = srcA.trim();
+        String srcB = getSourceDirTextB();
+        if (srcB != null) srcB = srcB.trim();
         List<String> cleaned = parsePatternLines(patternArea.getText());
 
-        if (src == null || src.isEmpty()) {
-            showError("対象フォルダを指定してください。");
+        if ((srcA == null || srcA.isEmpty()) && (srcB == null || srcB.isEmpty())) {
+            showError("フォルダA または フォルダBを指定してください。");
             return;
         }
-        addSourceHistory(src);
+        if (srcA != null && !srcA.isEmpty()) {
+            addSourceHistory(srcA);
+        }
+        if (srcB != null && !srcB.isEmpty()) {
+            addSourceHistory(srcB);
+        }
         if (cleaned.isEmpty()) {
             showError("抽出条件を1行以上入力してください。");
             return;
         }
 
-        Path srcDir = Paths.get(src);
-        if (!Files.isDirectory(srcDir)) {
-            showError("フォルダが存在しません: " + src);
-            return;
+        List<Path> sourceDirs = new ArrayList<>();
+        Map<Path, String> sourceTitles = new HashMap<>();
+        if (srcA != null && !srcA.isEmpty()) {
+            Path pathA = Paths.get(srcA);
+            sourceDirs.add(pathA);
+            sourceTitles.put(pathA, getSourceTitleA());
+        }
+        if (srcB != null && !srcB.isEmpty()) {
+            Path pathB = Paths.get(srcB);
+            if (sourceDirs.stream().noneMatch(pathB::equals)) {
+                sourceDirs.add(pathB);
+                sourceTitles.put(pathB, getSourceTitleB());
+            }
+        }
+        for (Path sourceDir : sourceDirs) {
+            if (!Files.isDirectory(sourceDir)) {
+                showError("フォルダが存在しません: " + sourceDir);
+                return;
+            }
         }
 
         searchButton.setEnabled(false);
@@ -767,7 +932,7 @@ public class FileCollectorFrame extends JFrame {
         logArea.setText("");
 
         List<String> excludePatterns = parsePatternLines(excludePatternArea.getText());
-        appendLog("抽出開始: " + srcDir);
+        appendLog("抽出開始: " + sourceDirs.stream().map(Path::toString).collect(Collectors.joining(", ")));
         appendLog("収集ファイルパターン (glob): " + String.join(", ", cleaned));
         if (!excludePatterns.isEmpty()) {
             appendLog("除外パターン (glob): " + String.join(", ", excludePatterns));
@@ -776,44 +941,52 @@ public class FileCollectorFrame extends JFrame {
         boolean dedupeByFileName = dedupeByFileNameCheckBox.isSelected();
         new Thread(() -> {
             try {
-                ensureFileListCache(srcDir, false);
-                List<Path> jarFiles = findFilesFromFileList(srcDir, cleaned);
-                if (!excludePatterns.isEmpty()) {
-                    List<PathMatcher> excludeMatchers = buildGlobMatchers(excludePatterns);
-                    if (!excludeMatchers.isEmpty()) {
-                        int before = jarFiles.size();
-                        jarFiles = jarFiles.stream().filter(p -> !pathMatchesAny(srcDir, p, excludeMatchers)).collect(Collectors.toList());
-                        appendLog("除外適用: " + (before - jarFiles.size()) + " 件を除外し " + jarFiles.size() + " 件");
-                    }
-                }
-                // 上書き: 既存の抽出結果を破棄し、今回の結果のみを表示する
-                HashSet<String> seenNames = new HashSet<>();
+                List<PathMatcher> excludeMatchers = buildGlobMatchers(excludePatterns);
                 List<Path> toAdd = new ArrayList<>();
+                List<Path> toAddRoots = new ArrayList<>();
                 List<Path> excludedByName = new ArrayList<>();
-                for (Path p : jarFiles) {
-                    if (dedupeByFileName && seenNames.contains(p.getFileName().toString())) {
-                        excludedByName.add(p);
-                        continue;
+                int totalFound = 0;
+                for (Path srcDir : sourceDirs) {
+                    HashSet<String> seenNamesInSource = new HashSet<>();
+                    ensureFileListCache(srcDir, false);
+                    List<Path> found = findFilesFromFileList(srcDir, cleaned);
+                    if (!excludeMatchers.isEmpty()) {
+                        int before = found.size();
+                        found = found.stream().filter(p -> !pathMatchesAny(srcDir, p, excludeMatchers)).collect(Collectors.toList());
+                        appendLog("除外適用(" + srcDir + "): " + (before - found.size()) + " 件を除外し " + found.size() + " 件");
                     }
-                    toAdd.add(p);
-                    seenNames.add(p.getFileName().toString());
+                    totalFound += found.size();
+                    for (Path p : found) {
+                        if (dedupeByFileName && seenNamesInSource.contains(p.getFileName().toString())) {
+                            excludedByName.add(p);
+                            continue;
+                        }
+                        toAdd.add(p);
+                        toAddRoots.add(srcDir);
+                        seenNamesInSource.add(p.getFileName().toString());
+                    }
                 }
 
                 SwingUtilities.invokeLater(() -> {
                     fileListModel.clear();
                     lastFoundFiles.clear();
-                    for (Path p : toAdd) {
+                    lastFoundRoots.clear();
+                    for (int i = 0; i < toAdd.size(); i++) {
+                        Path p = toAdd.get(i);
+                        Path root = toAddRoots.get(i);
                         lastFoundFiles.add(p);
-                        fileListModel.addElement(srcDir.relativize(p).toString());
+                        lastFoundRoots.add(root);
+                        String title = sourceTitles.getOrDefault(root, root.getFileName() != null ? root.getFileName().toString() : root.toString());
+                        fileListModel.addElement("[" + title + "] " + root.relativize(p));
                     }
                     updateResultCount();
                 });
 
-                appendLog("見つかったファイル数: " + jarFiles.size() + "、結果 " + toAdd.size() + " 件で上書きしました" + (dedupeByFileName ? "（同名ファイル除外）" : ""));
+                appendLog("見つかったファイル数: " + totalFound + "、結果 " + toAdd.size() + " 件で上書きしました" + (dedupeByFileName ? "（同名ファイル除外）" : ""));
                 for (Path it : excludedByName) {
-                    appendLog("(除外): " + srcDir.relativize(it).toString().replace("/", "\\"));
+                    appendLog("(除外): " + it.getFileName());
                 }
-                if (jarFiles.isEmpty()) {
+                if (totalFound == 0) {
                     appendLog("対象ファイルが見つかりませんでした。");
                 }
             } catch (Exception e) {
@@ -836,14 +1009,6 @@ public class FileCollectorFrame extends JFrame {
             showError("まず抽出を行い、ファイル一覧を取得してください。");
             return;
         }
-        String src = getSourceDirText();
-        if (src != null) src = src.trim();
-        if (src == null || src.isEmpty()) {
-            showError("対象フォルダを指定してください。");
-            return;
-        }
-        Path baseDir = Paths.get(src);
-        String baseName = baseDir.getFileName() != null ? baseDir.getFileName().toString() : "filecollector";
         String suffix = fileSuffixField.getText();
         if (suffix != null) suffix = suffix.trim();
         else suffix = "";
@@ -865,14 +1030,20 @@ public class FileCollectorFrame extends JFrame {
             if (toCopy <= 0) return;
             Map<String, Integer> nameTotalCount = new HashMap<>();
             for (int i = 0; i < toCopy; i++) {
+                Path root = i < lastFoundRoots.size() ? lastFoundRoots.get(i) : null;
+                String titlePrefix = getSourceTitleForRoot(root).replaceAll("[\\\\/:*?\"<>|]", "_");
                 String nameWithSuffix = fileNameWithSuffix(lastFoundFiles.get(i).getFileName().toString(), suffix);
+                nameWithSuffix = titlePrefix + "_" + nameWithSuffix;
                 nameTotalCount.put(nameWithSuffix, nameTotalCount.getOrDefault(nameWithSuffix, 0) + 1);
             }
             Map<String, Integer> nameCount = new HashMap<>();
             for (int i = 0; i < toCopy; i++) {
                 Path file = lastFoundFiles.get(i);
+                Path root = i < lastFoundRoots.size() ? lastFoundRoots.get(i) : null;
+                String titlePrefix = getSourceTitleForRoot(root).replaceAll("[\\\\/:*?\"<>|]", "_");
                 String baseFileName = file.getFileName().toString();
                 String nameWithSuffix = fileNameWithSuffix(baseFileName, suffix);
+                nameWithSuffix = titlePrefix + "_" + nameWithSuffix;
                 String destName = uniqueFlatName(nameWithSuffix, nameCount, nameTotalCount);
                 Path dest = outDir.resolve(destName);
                 Files.copy(file, dest, StandardCopyOption.REPLACE_EXISTING);
@@ -884,6 +1055,9 @@ public class FileCollectorFrame extends JFrame {
             for (int i = 0; i < toCopy; i++) {
                 fileListModel.remove(0);
                 lastFoundFiles.remove(0);
+                if (!lastFoundRoots.isEmpty()) {
+                    lastFoundRoots.remove(0);
+                }
             }
             updateResultCount();
             updateResultListButtons();
@@ -1063,10 +1237,45 @@ public class FileCollectorFrame extends JFrame {
     }
 
     private void doFileListOutput() {
-        String src = getSourceDirText();
+        String srcA = getSourceDirTextA();
+        String srcB = getSourceDirTextB();
+        if (srcA != null) srcA = srcA.trim();
+        if (srcB != null) srcB = srcB.trim();
+
+        if ((srcA == null || srcA.isEmpty()) && (srcB == null || srcB.isEmpty())) {
+            showError("フォルダA または フォルダBを指定してください。");
+            return;
+        }
+        try {
+            if (Files.exists(TREE_OUTPUT_DIR)) {
+                Files.walk(TREE_OUTPUT_DIR).sorted(Comparator.reverseOrder()).forEach(p -> {
+                    try {
+                        Files.delete(p);
+                    } catch (java.io.IOException ex) {
+                        throw new RuntimeException(ex);
+                    }
+                });
+            }
+            Files.createDirectories(TREE_OUTPUT_DIR);
+        } catch (Exception e) {
+            appendLog("ファイル tree 出力前のクリーン中にエラー: " + getErrorMessage(e));
+            SwingUtilities.invokeLater(() ->
+                JOptionPane.showMessageDialog(this, "ファイル tree 出力前のクリーン中にエラー: " + getErrorMessage(e), "エラー", JOptionPane.ERROR_MESSAGE)
+            );
+            return;
+        }
+        if (srcA != null && !srcA.isEmpty()) {
+            doFileListOutputSingle(srcA, "フォルダA", getSourceTitleA());
+        }
+        if (srcB != null && !srcB.isEmpty() && (srcA == null || !srcB.equals(srcA))) {
+            doFileListOutputSingle(srcB, "フォルダB", getSourceTitleB());
+        }
+    }
+
+    private void doFileListOutputSingle(String src, String label, String title) {
         if (src != null) src = src.trim();
         if (src == null || src.isEmpty()) {
-            showError("対象フォルダを指定してください。");
+            showError(label + "を指定してください。");
             return;
         }
 
@@ -1076,7 +1285,7 @@ public class FileCollectorFrame extends JFrame {
             return;
         }
 
-        appendLog("ファイル tree 出力開始: " + root);
+        appendLog("ファイル tree 出力開始(" + label + "): " + root);
         try {
             ensureFileListCache(root, true);
 
@@ -1084,21 +1293,12 @@ public class FileCollectorFrame extends JFrame {
             Path outDir = TREE_OUTPUT_DIR;
             Path outPath = outDir.resolve(baseName + ".tree.txt");
 
-            if (clearBeforeOutputCheckBox.isSelected() && Files.exists(outDir)) {
-                Files.walk(outDir).sorted(Comparator.reverseOrder()).forEach(p -> {
-                    try {
-                        Files.delete(p);
-                    } catch (java.io.IOException ex) {
-                        throw new RuntimeException(ex);
-                    }
-                });
-            }
             Files.createDirectories(outDir);
 
             List<String> lines = buildTreeLines(root);
             Files.write(outPath, lines, StandardCharsets.UTF_8);
 
-            appendLog("ファイル tree を " + outPath + " に出力しました。");
+            appendLog("ファイル tree(" + label + ") を " + outPath + " に出力しました。");
 
             Desktop.getDesktop().open(outDir.toFile());
             appendLog("出力フォルダをエクスプローラで表示しました。");
