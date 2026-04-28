@@ -1267,7 +1267,7 @@ public class FileCollectorFrame extends JFrame {
         if (srcA != null && !srcA.isEmpty()) {
             doFileListOutputSingle(srcA, "フォルダA", getSourceTitleA());
         }
-        if (srcB != null && !srcB.isEmpty() && (srcA == null || !srcB.equals(srcA))) {
+        if (srcB != null && !srcB.isEmpty()) {
             doFileListOutputSingle(srcB, "フォルダB", getSourceTitleB());
         }
     }
