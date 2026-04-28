@@ -149,7 +149,7 @@ public class FileCollectorFrame extends JFrame {
 
     private void initLayout() {
         JPanel content = new JPanel(new BorderLayout(8, 8));
-        content.setBorder(new EmptyBorder(8, 8, 8, 8));
+        content.setBorder(new EmptyBorder(0, 8, 8, 8));
         setContentPane(content);
 
         JPanel form = new JPanel();
@@ -162,7 +162,7 @@ public class FileCollectorFrame extends JFrame {
 
         int row = 0;
 
-        c.insets = new Insets(0, 4, 4, 4);
+        c.insets = new Insets(0, 4, 0, 4);
         JPanel sourceRowsPanel = new JPanel();
         sourceRowsPanel.setLayout(new BoxLayout(sourceRowsPanel, BoxLayout.Y_AXIS));
         JPanel sourceRowPanel = new JPanel(new BorderLayout(4, 0));
@@ -806,9 +806,8 @@ public class FileCollectorFrame extends JFrame {
         try {
             if (!Files.exists(file)) return;
             String value = new String(Files.readAllBytes(file), StandardCharsets.UTF_8).trim();
-            if (!value.isEmpty()) {
-                combo.getEditor().setItem(value);
-            }
+            // 前回値が空文字の場合も、履歴先頭ではなく空欄を初期表示する
+            combo.getEditor().setItem(value);
         } catch (Exception ignored) {
         }
     }
