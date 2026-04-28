@@ -66,6 +66,7 @@ Java + Swing で作ったファイル収集ツールです。
 - `output-count.txt` : ファイル出力の1回あたり件数
 - `pattern.txt` : 抽出条件
 - `exclude-pattern.txt` : 除外条件
+- `condition-presets.yml` : 抽出条件/除外条件の名前付きセット
 - `clipboard-prefix.txt` : 先頭付加
 - `clipboard-suffix.txt` : 末尾付加
 - `file-suffix.txt` : 拡張子追加文字
@@ -83,6 +84,13 @@ Java + Swing で作ったファイル収集ツールです。
   - `filePathListA` / `filePathListB`（相対パスの `List<String>`）
   - `fileNameListA` / `fileNameListB`（ファイル名のみの `List<String>`）
   - `countA` / `countB`
+
+## 条件セット（抽出条件/除外条件）
+
+- `条件セット` のフィルタ欄で名前を部分一致検索し、候補を絞り込めます。
+- `条件セット` プルダウンに名前を入力して `条件保存` を押すと、現在の抽出条件と除外条件をセットで保存します。
+- プルダウンで保存済み名を選択し、`条件読込` を押すと抽出条件と除外条件を読み込みます。
+- 設定は `~/.filecollector/condition-presets.yml` に保存されます。
 
 ## ビルド & 実行
 

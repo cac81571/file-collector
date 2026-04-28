@@ -81,6 +81,10 @@ public class FileCollectorFrame extends JFrame {
     private final JTextField sourceFilterFieldB = new JTextField(20);
     private final JTextArea patternArea = new JTextArea("", 6, 55);
     private final JTextArea excludePatternArea = new JTextArea("", 2, 55);
+    private final JComboBox<String> conditionPresetCombo = new JComboBox<>();
+    private final JTextField conditionPresetFilterField = new JTextField(16);
+    private final JButton loadConditionPresetButton = new JButton("条件読込");
+    private final JButton saveConditionPresetButton = new JButton("条件保存");
     private final JTextField fileSuffixExcludeExtensionsField = new JTextField("pdf,docx,doc,pptx,ppt,rtf,xlsx,xls,csv,json,txt,md,html,htm,xml", 30);
     private final JTextField fileSuffixField = new JTextField(".txt", 6);
     private final JTextArea logArea = new JTextArea();
@@ -117,6 +121,7 @@ public class FileCollectorFrame extends JFrame {
     private static final Path SOURCE_LAST_B_FILE = CONFIG_DIR.resolve("source-last-b.txt");
     private static final Path PATTERN_FILE = CONFIG_DIR.resolve("pattern.txt");
     private static final Path EXCLUDE_PATTERN_FILE = CONFIG_DIR.resolve("exclude-pattern.txt");
+    private static final Path CONDITION_PRESETS_FILE = CONFIG_DIR.resolve("condition-presets.yml");
     private static final Path CLIPBOARD_PREFIX_FILE = CONFIG_DIR.resolve("clipboard-prefix.txt");
     private static final Path CLIPBOARD_SUFFIX_FILE = CONFIG_DIR.resolve("clipboard-suffix.txt");
     private static final Path FILE_SUFFIX_FILE = CONFIG_DIR.resolve("file-suffix.txt");
@@ -128,6 +133,18 @@ public class FileCollectorFrame extends JFrame {
 
     private Set<String> fileSuffixExcludeExtensions = new HashSet<>();
     private final Map<String, Path> aiMessageScripts = new LinkedHashMap<>();
+    private final Map<String, ConditionPreset> conditionPresets = new LinkedHashMap<>();
+    private boolean updatingConditionPresetCombo = false;
+
+    private static class ConditionPreset {
+        private final String pattern;
+        private final String excludePattern;
+
+        private ConditionPreset(String pattern, String excludePattern) {
+            this.pattern = pattern != null ? pattern : "";
+            this.excludePattern = excludePattern != null ? excludePattern : "";
+        }
+    }
 
     public FileCollectorFrame() {
         super("FileCollector");
@@ -346,6 +363,32 @@ public class FileCollectorFrame extends JFrame {
         c.gridwidth = 1;
         c.weighty = 0.0;
 
+        row++;
+        JPanel conditionPresetPanel = new JPanel(new BorderLayout(6, 0));
+        JPanel conditionPresetLeft = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        conditionPresetLeft.add(new JLabel("条件セット"));
+        conditionPresetPanel.add(conditionPresetLeft, BorderLayout.WEST);
+        conditionPresetCombo.setEditable(true);
+        conditionPresetCombo.setToolTipText("抽出条件と除外条件のセット名を選択/入力");
+        conditionPresetFilterField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "フィルタ条件（部分一致）");
+        JPanel conditionPresetCenter = new JPanel(new BorderLayout(4, 0));
+        conditionPresetCenter.add(conditionPresetFilterField, BorderLayout.WEST);
+        conditionPresetCenter.add(conditionPresetCombo, BorderLayout.CENTER);
+        conditionPresetPanel.add(conditionPresetCenter, BorderLayout.CENTER);
+        JPanel conditionPresetButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+        conditionPresetButtons.add(loadConditionPresetButton);
+        conditionPresetButtons.add(saveConditionPresetButton);
+        conditionPresetPanel.add(conditionPresetButtons, BorderLayout.EAST);
+
+        c.gridx = 0;
+        c.gridy = row;
+        c.gridwidth = 3;
+        c.weightx = 1.0;
+        c.anchor = GridBagConstraints.WEST;
+        c.fill = GridBagConstraints.HORIZONTAL;
+        form.add(conditionPresetPanel, c);
+        c.gridwidth = 1;
+
         JPanel optionsRow = new JPanel(new BorderLayout(8, 0));
         JPanel optionsWest = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         JLabel prefixLabel2 = new JLabel("クリップボード出力");
@@ -472,6 +515,8 @@ public class FileCollectorFrame extends JFrame {
 
     private void initActions() {
         outputCountCombo.addActionListener(evt -> saveOutputCount());
+        loadConditionPresetButton.addActionListener(evt -> applySelectedConditionPreset());
+        saveConditionPresetButton.addActionListener(evt -> saveCurrentConditionPreset());
         searchButton.addActionListener(evt -> doSearch());
         getRootPane().registerKeyboardAction(
                 evt -> doSearch(),
@@ -520,6 +565,23 @@ public class FileCollectorFrame extends JFrame {
             public void removeUpdate(DocumentEvent e) { onFilterBChanged.run(); }
             @Override
             public void changedUpdate(DocumentEvent e) { onFilterBChanged.run(); }
+        });
+
+        Runnable onConditionPresetFilterChanged = () -> {
+            applyConditionPresetFilter(conditionPresetFilterField.getText());
+            if (conditionPresetCombo.getItemCount() > 0) {
+                conditionPresetCombo.showPopup();
+            } else {
+                conditionPresetCombo.hidePopup();
+            }
+        };
+        conditionPresetFilterField.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) { onConditionPresetFilterChanged.run(); }
+            @Override
+            public void removeUpdate(DocumentEvent e) { onConditionPresetFilterChanged.run(); }
+            @Override
+            public void changedUpdate(DocumentEvent e) { onConditionPresetFilterChanged.run(); }
         });
     }
 
@@ -910,6 +972,7 @@ public class FileCollectorFrame extends JFrame {
             if (Files.exists(SOURCE_TITLE_B_FILE)) {
                 sourceTitleFieldB.setText(new String(Files.readAllBytes(SOURCE_TITLE_B_FILE), StandardCharsets.UTF_8).trim());
             }
+            loadConditionPresets();
             loadAiMessageScripts();
             if (Files.exists(FILE_SUFFIX_EXCLUDE_EXTENSIONS_FILE)) {
                 List<String> exts = new ArrayList<>();
@@ -956,6 +1019,164 @@ public class FileCollectorFrame extends JFrame {
         if (aiMessageTemplateCombo.getItemCount() > 0) {
             aiMessageTemplateCombo.setSelectedIndex(0);
         }
+    }
+
+    private void loadConditionPresets() {
+        conditionPresets.clear();
+        if (Files.exists(CONDITION_PRESETS_FILE)) {
+            try {
+                parseConditionPresetsYaml(Files.readAllLines(CONDITION_PRESETS_FILE, StandardCharsets.UTF_8));
+            } catch (Exception ignored) {
+            }
+        }
+        refreshConditionPresetCombo();
+    }
+
+    private void refreshConditionPresetCombo() {
+        Object current = conditionPresetCombo.isEditable() && conditionPresetCombo.getEditor() != null
+                ? conditionPresetCombo.getEditor().getItem()
+                : conditionPresetCombo.getSelectedItem();
+        String currentText = current != null ? current.toString() : "";
+        String filterText = conditionPresetFilterField.getText();
+        updatingConditionPresetCombo = true;
+        try {
+            applyConditionPresetFilter(filterText);
+            conditionPresetCombo.getEditor().setItem(currentText);
+        } finally {
+            updatingConditionPresetCombo = false;
+        }
+    }
+
+    private void applyConditionPresetFilter(String filterText) {
+        String filter = (filterText != null && !filterText.trim().isEmpty()) ? filterText.trim().toLowerCase() : "";
+        conditionPresetCombo.removeAllItems();
+        for (String name : conditionPresets.keySet()) {
+            if (filter.isEmpty() || name.toLowerCase().contains(filter)) {
+                conditionPresetCombo.addItem(name);
+            }
+        }
+    }
+
+    private void applySelectedConditionPreset() {
+        if (updatingConditionPresetCombo) return;
+        Object selected = conditionPresetCombo.isEditable() && conditionPresetCombo.getEditor() != null
+                ? conditionPresetCombo.getEditor().getItem()
+                : conditionPresetCombo.getSelectedItem();
+        String name = selected != null ? selected.toString().trim() : "";
+        if (name.isEmpty()) return;
+        ConditionPreset preset = conditionPresets.get(name);
+        if (preset == null) return;
+        patternArea.setText(preset.pattern);
+        excludePatternArea.setText(preset.excludePattern);
+        appendLog("条件セットを読み込みました: " + name);
+    }
+
+    private void saveCurrentConditionPreset() {
+        Object selected = conditionPresetCombo.isEditable() && conditionPresetCombo.getEditor() != null
+                ? conditionPresetCombo.getEditor().getItem()
+                : conditionPresetCombo.getSelectedItem();
+        String name = selected != null ? selected.toString().trim() : "";
+        if (name.isEmpty()) {
+            showError("条件セット名を入力してください。");
+            return;
+        }
+        conditionPresets.put(name, new ConditionPreset(patternArea.getText(), excludePatternArea.getText()));
+        try {
+            saveConditionPresets();
+            refreshConditionPresetCombo();
+            conditionPresetCombo.getEditor().setItem(name);
+            appendLog("条件セットを保存しました: " + name);
+        } catch (Exception e) {
+            appendLog("条件セット保存エラー: " + getErrorMessage(e));
+            showError("条件セットを保存できませんでした: " + getErrorMessage(e));
+        }
+    }
+
+    private void saveConditionPresets() throws java.io.IOException {
+        Files.createDirectories(CONFIG_DIR);
+        List<String> lines = new ArrayList<>();
+        lines.add("presets:");
+        for (Map.Entry<String, ConditionPreset> entry : conditionPresets.entrySet()) {
+            lines.add("  - name: \"" + escapeYamlDoubleQuoted(entry.getKey()) + "\"");
+            lines.add("    pattern: \"" + escapeYamlDoubleQuoted(entry.getValue().pattern) + "\"");
+            lines.add("    excludePattern: \"" + escapeYamlDoubleQuoted(entry.getValue().excludePattern) + "\"");
+        }
+        Files.write(CONDITION_PRESETS_FILE, lines, StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+    }
+
+    private static String escapeYamlDoubleQuoted(String text) {
+        String t = text != null ? text : "";
+        return t.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\t", "\\t")
+                .replace("\r", "\\r")
+                .replace("\n", "\\n");
+    }
+
+    private static String unescapeYamlDoubleQuoted(String text) {
+        String s = text != null ? text : "";
+        StringBuilder out = new StringBuilder(s.length());
+        boolean escaped = false;
+        for (int i = 0; i < s.length(); i++) {
+            char ch = s.charAt(i);
+            if (escaped) {
+                switch (ch) {
+                    case 'n' -> out.append('\n');
+                    case 'r' -> out.append('\r');
+                    case 't' -> out.append('\t');
+                    case '\\' -> out.append('\\');
+                    default -> {
+                        out.append('\\');
+                        out.append(ch);
+                    }
+                }
+                escaped = false;
+            } else if (ch == '\\') {
+                escaped = true;
+            } else {
+                out.append(ch);
+            }
+        }
+        if (escaped) out.append('\\');
+        return out.toString();
+    }
+
+    private void parseConditionPresetsYaml(List<String> lines) {
+        String name = null;
+        String pattern = "";
+        String exclude = "";
+        boolean inItem = false;
+        for (String line : lines) {
+            String raw = line != null ? line.trim() : "";
+            if (raw.isEmpty() || raw.startsWith("#") || raw.equals("presets:")) continue;
+            if (raw.startsWith("- name:")) {
+                if (inItem && name != null && !name.isEmpty()) {
+                    conditionPresets.put(name, new ConditionPreset(pattern, exclude));
+                }
+                inItem = true;
+                pattern = "";
+                exclude = "";
+                name = parseYamlQuotedValue(raw.substring("- name:".length()).trim());
+            } else if (raw.startsWith("name:")) {
+                name = parseYamlQuotedValue(raw.substring("name:".length()).trim());
+            } else if (raw.startsWith("pattern:")) {
+                pattern = parseYamlQuotedValue(raw.substring("pattern:".length()).trim());
+            } else if (raw.startsWith("excludePattern:")) {
+                exclude = parseYamlQuotedValue(raw.substring("excludePattern:".length()).trim());
+            }
+        }
+        if (inItem && name != null && !name.isEmpty()) {
+            conditionPresets.put(name, new ConditionPreset(pattern, exclude));
+        }
+    }
+
+    private static String parseYamlQuotedValue(String value) {
+        String v = value != null ? value.trim() : "";
+        if (v.length() >= 2 && v.startsWith("\"") && v.endsWith("\"")) {
+            v = v.substring(1, v.length() - 1);
+        }
+        return unescapeYamlDoubleQuoted(v);
     }
 
     private static String defaultAiMessageScript() {
