@@ -68,6 +68,8 @@ import javax.swing.event.DocumentListener;
 import javax.swing.event.ListSelectionEvent;
 
 import com.formdev.flatlaf.FlatClientProperties;
+import groovy.lang.Binding;
+import groovy.lang.GroovyShell;
 
 public class FileCollectorFrame extends JFrame {
 
@@ -93,6 +95,7 @@ public class FileCollectorFrame extends JFrame {
     private final JCheckBox clipboardAddPrefixSuffixCheckBox = new JCheckBox("先頭・末尾文字付加", true);
     private final JButton aiMessageButton = new JButton("AI用メッセージ");
     private final JComboBox<String> aiMessageTemplateCombo = new JComboBox<>();
+    private final JButton openConfigDirButton = new JButton("設定フォルダを開く");
     private final JButton copyFilesButton = new JButton("ファイルに出力");
     private final JButton fileListButton = new JButton("tree 出力");
     private final JButton removeSelectedButton = new JButton("選択削除");
@@ -119,12 +122,12 @@ public class FileCollectorFrame extends JFrame {
     private static final Path FILE_SUFFIX_FILE = CONFIG_DIR.resolve("file-suffix.txt");
     private static final Path SOURCE_TITLE_A_FILE = CONFIG_DIR.resolve("source-title-a.txt");
     private static final Path SOURCE_TITLE_B_FILE = CONFIG_DIR.resolve("source-title-b.txt");
-    private static final Path AI_MESSAGE_TEMPLATES_FILE = CONFIG_DIR.resolve("ai-message-templates.txt");
+    private static final Path AI_MESSAGE_SCRIPTS_DIR = CONFIG_DIR.resolve("ai-message-scripts");
     /** 拡張子追加文字を付加しない拡張子一覧（ドットなし・小文字）。設定ファイル file-suffix-exclude-extensions.txt で定義。 */
     private static final Path FILE_SUFFIX_EXCLUDE_EXTENSIONS_FILE = CONFIG_DIR.resolve("file-suffix-exclude-extensions.txt");
 
     private Set<String> fileSuffixExcludeExtensions = new HashSet<>();
-    private final Map<String, String> aiMessageTemplates = new LinkedHashMap<>();
+    private final Map<String, Path> aiMessageScripts = new LinkedHashMap<>();
 
     public FileCollectorFrame() {
         super("FileCollector");
@@ -426,10 +429,6 @@ public class FileCollectorFrame extends JFrame {
         leftButtonsPanel.add(removeExceptSelectedButton);
         resultHeader.add(leftButtonsPanel, BorderLayout.WEST);
         JPanel rightButtonsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
-        rightButtonsPanel.add(new JLabel("AI用メッセージ"));
-        aiMessageTemplateCombo.setPreferredSize(new Dimension(180, aiMessageTemplateCombo.getPreferredSize().height));
-        rightButtonsPanel.add(aiMessageTemplateCombo);
-        rightButtonsPanel.add(aiMessageButton);
         rightButtonsPanel.add(new JLabel("1回あたり"));
         outputCountCombo.setEditable(true);
         outputCountCombo.setPreferredSize(new Dimension(55, outputCountCombo.getPreferredSize().height));
@@ -440,6 +439,18 @@ public class FileCollectorFrame extends JFrame {
         resultHeader.add(rightButtonsPanel, BorderLayout.EAST);
         center.add(resultHeader, BorderLayout.NORTH);
         center.add(split, BorderLayout.CENTER);
+
+        JPanel bottomButtonsPanel = new JPanel(new BorderLayout());
+        JPanel bottomLeftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
+        bottomLeftPanel.add(openConfigDirButton);
+        bottomButtonsPanel.add(bottomLeftPanel, BorderLayout.WEST);
+        JPanel bottomRightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 4));
+        bottomRightPanel.add(new JLabel("AI用メッセージ"));
+        aiMessageTemplateCombo.setPreferredSize(new Dimension(180, aiMessageTemplateCombo.getPreferredSize().height));
+        bottomRightPanel.add(aiMessageTemplateCombo);
+        bottomRightPanel.add(aiMessageButton);
+        bottomButtonsPanel.add(bottomRightPanel, BorderLayout.EAST);
+        center.add(bottomButtonsPanel, BorderLayout.SOUTH);
         content.add(center, BorderLayout.CENTER);
 
         updateResultListButtons();
@@ -469,6 +480,7 @@ public class FileCollectorFrame extends JFrame {
         );
         searchButton.setToolTipText("対象フォルダを抽出（Ctrl+Enter）");
         copyFilesButton.addActionListener(evt -> doCopyFiles());
+        openConfigDirButton.addActionListener(evt -> doOpenConfigDir());
         aiMessageButton.addActionListener(evt -> doAiMessage());
         clipboardOutputButton.addActionListener(evt -> doClipboardOutput());
         clipboardAddPrefixSuffixCheckBox.addItemListener(evt -> updateClipboardPrefixSuffixEnabled());
@@ -620,45 +632,83 @@ public class FileCollectorFrame extends JFrame {
             showError("まず抽出を行い、ファイル一覧を取得してください。");
             return;
         }
-        int count = fileListModel.getSize();
-        List<String> listLines = new ArrayList<>();
-        for (int i = 0; i < count; i++) {
-            String path = fileListModel.getElementAt(i);
-            if (path != null) path = path.replace('\\', '/');
-            else path = "";
-            listLines.add((i + 1) + "/" + count + "  " + path);
-        }
-        String selectedTemplateName = aiMessageTemplateCombo.getSelectedItem() != null
+        String scriptName = aiMessageTemplateCombo.getSelectedItem() != null
                 ? aiMessageTemplateCombo.getSelectedItem().toString()
                 : "";
-        String template = aiMessageTemplates.getOrDefault(selectedTemplateName, defaultAiMessageTemplate());
-        String text = applyAiMessageTemplate(template, count, String.join("\n", listLines));
+        Path scriptPath = aiMessageScripts.get(scriptName);
+        if (scriptPath == null || !Files.exists(scriptPath)) {
+            showError("AI用メッセージスクリプトが見つかりません: " + scriptName);
+            return;
+        }
+
+        String srcA = getSourceDirTextA();
+        String srcB = getSourceDirTextB();
+        String sourcePathA = (srcA != null) ? srcA.trim() : "";
+        String sourcePathB = (srcB != null) ? srcB.trim() : "";
+        List<String> filePathListA = collectRelativePathsForSource(sourcePathA);
+        List<String> filePathListB = collectRelativePathsForSource(sourcePathB);
+        List<String> fileNameListA = filePathListA.stream().map(FileCollectorFrame::fileNameOnly).collect(Collectors.toList());
+        List<String> fileNameListB = filePathListB.stream().map(FileCollectorFrame::fileNameOnly).collect(Collectors.toList());
+
+        Binding binding = new Binding();
+        binding.setVariable("folderPathA", sourcePathA);
+        binding.setVariable("folderPathB", sourcePathB);
+        binding.setVariable("titleA", getSourceTitleA());
+        binding.setVariable("titleB", getSourceTitleB());
+        binding.setVariable("filePathListA", filePathListA);
+        binding.setVariable("filePathListB", filePathListB);
+        binding.setVariable("fileNameListA", fileNameListA);
+        binding.setVariable("fileNameListB", fileNameListB);
+        binding.setVariable("countA", filePathListA.size());
+        binding.setVariable("countB", filePathListB.size());
+
+        String text;
+        try {
+            Object result = new GroovyShell(binding).evaluate(scriptPath.toFile());
+            text = result != null ? result.toString() : "";
+        } catch (Exception e) {
+            appendLog("AI用メッセージスクリプト実行エラー: " + getErrorMessage(e));
+            showError("AI用メッセージスクリプト実行エラー: " + getErrorMessage(e));
+            return;
+        }
         try {
             Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
             clipboard.setContents(new StringSelection(text), null);
-            appendLog("AI用メッセージをクリップボードに出力しました（" + count + " 件 / テンプレート: " + selectedTemplateName + "）。");
+            appendLog("AI用メッセージをクリップボードに出力しました（スクリプト: " + scriptName + "）。");
         } catch (Exception e) {
             appendLog("AI用メッセージ出力エラー: " + getErrorMessage(e));
             showError("クリップボードにコピーできませんでした: " + getErrorMessage(e));
         }
     }
 
-    private static String defaultAiMessageTemplate() {
-        return """
-                これからファイルを分割して送ります。
-                全部で #{count} ファイルあります。
-
-                #{list}
-
-                これから順番に送ります。
-                すべて送るまで解析しないでください。
-                """;
+    private List<String> collectRelativePathsForSource(String sourcePath) {
+        List<String> result = new ArrayList<>();
+        if (sourcePath == null || sourcePath.isEmpty()) return result;
+        Path sourceRoot;
+        try {
+            sourceRoot = Paths.get(sourcePath).toAbsolutePath().normalize();
+        } catch (Exception e) {
+            return result;
+        }
+        for (int i = 0; i < lastFoundFiles.size(); i++) {
+            if (i >= lastFoundRoots.size()) break;
+            Path root = lastFoundRoots.get(i);
+            Path file = lastFoundFiles.get(i);
+            if (root == null || file == null) continue;
+            Path normalizedRoot = root.toAbsolutePath().normalize();
+            if (!normalizedRoot.equals(sourceRoot)) continue;
+            try {
+                result.add(normalizePath(normalizedRoot.relativize(file.toAbsolutePath().normalize()).toString()));
+            } catch (Exception ignored) {
+            }
+        }
+        return result;
     }
 
-    private static String applyAiMessageTemplate(String template, int count, String listText) {
-        String t = (template != null && !template.isEmpty()) ? template : defaultAiMessageTemplate();
-        return t.replaceAll("#\\{count\\}", Matcher.quoteReplacement(String.valueOf(count)))
-                .replaceAll("#\\{list\\}", Matcher.quoteReplacement(listText != null ? listText : ""));
+    private static String fileNameOnly(String relativePath) {
+        if (relativePath == null || relativePath.isEmpty()) return "";
+        int slash = relativePath.lastIndexOf('/');
+        return slash >= 0 ? relativePath.substring(slash + 1) : relativePath;
     }
 
     private static String applyClipboardPlaceholders(String template, Path path, Path baseDir, String title) {
@@ -860,7 +910,7 @@ public class FileCollectorFrame extends JFrame {
             if (Files.exists(SOURCE_TITLE_B_FILE)) {
                 sourceTitleFieldB.setText(new String(Files.readAllBytes(SOURCE_TITLE_B_FILE), StandardCharsets.UTF_8).trim());
             }
-            loadAiMessageTemplates();
+            loadAiMessageScripts();
             if (Files.exists(FILE_SUFFIX_EXCLUDE_EXTENSIONS_FILE)) {
                 List<String> exts = new ArrayList<>();
                 for (String line : Files.readAllLines(FILE_SUFFIX_EXCLUDE_EXTENSIONS_FILE, StandardCharsets.UTF_8)) {
@@ -876,46 +926,51 @@ public class FileCollectorFrame extends JFrame {
         }
     }
 
-    private void loadAiMessageTemplates() {
-        aiMessageTemplates.clear();
-        boolean loadedFromFile = false;
-        if (Files.exists(AI_MESSAGE_TEMPLATES_FILE)) {
-            try {
-                for (String rawLine : Files.readAllLines(AI_MESSAGE_TEMPLATES_FILE, StandardCharsets.UTF_8)) {
-                    String line = rawLine != null ? rawLine.trim() : "";
-                    if (line.isEmpty() || line.startsWith("#")) continue;
-                    int eq = line.indexOf('=');
-                    if (eq <= 0) continue;
-                    String name = line.substring(0, eq).trim();
-                    String template = line.substring(eq + 1).trim();
-                    if (name.isEmpty()) continue;
-                    aiMessageTemplates.put(name, template.replace("\\n", "\n"));
-                }
-                loadedFromFile = !aiMessageTemplates.isEmpty();
-            } catch (Exception ignored) {
+    private void loadAiMessageScripts() {
+        aiMessageScripts.clear();
+        try {
+            Files.createDirectories(AI_MESSAGE_SCRIPTS_DIR);
+            List<Path> scriptFiles;
+            try (var stream = Files.list(AI_MESSAGE_SCRIPTS_DIR)) {
+                scriptFiles = stream
+                        .filter(p -> Files.isRegularFile(p) && p.getFileName().toString().toLowerCase().endsWith(".groovy"))
+                        .sorted(Comparator.comparing(p -> p.getFileName().toString().toLowerCase()))
+                        .collect(Collectors.toList());
             }
-        }
-        if (aiMessageTemplates.isEmpty()) {
-            aiMessageTemplates.put("標準", defaultAiMessageTemplate());
-        }
-        if (!loadedFromFile) {
-            try {
-                Files.createDirectories(CONFIG_DIR);
-                List<String> defaults = List.of(
-                        "# 1行ごとに name=template を記述。改行は \\n で表現します。",
-                        "# 利用可能プレースホルダ: #{count}, #{list}",
-                        "標準=これからファイルを分割して送ります。\\n全部で #{count} ファイルあります。\\n\\n#{list}\\n\\nこれから順番に送ります。\\nすべて送るまで解析しないでください。"
-                );
-                Files.write(AI_MESSAGE_TEMPLATES_FILE, defaults, StandardCharsets.UTF_8,
+            if (scriptFiles.isEmpty()) {
+                Path defaultScript = AI_MESSAGE_SCRIPTS_DIR.resolve("default.groovy");
+                Files.writeString(defaultScript, defaultAiMessageScript(), StandardCharsets.UTF_8,
                         StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
-            } catch (Exception ignored) {
+                scriptFiles = List.of(defaultScript);
             }
+            for (Path script : scriptFiles) {
+                String fileName = script.getFileName().toString();
+                aiMessageScripts.put(fileName, script);
+            }
+        } catch (Exception ignored) {
         }
         aiMessageTemplateCombo.removeAllItems();
-        for (String name : aiMessageTemplates.keySet()) {
+        for (String name : aiMessageScripts.keySet()) {
             aiMessageTemplateCombo.addItem(name);
         }
-        aiMessageTemplateCombo.setSelectedIndex(0);
+        if (aiMessageTemplateCombo.getItemCount() > 0) {
+            aiMessageTemplateCombo.setSelectedIndex(0);
+        }
+    }
+
+    private static String defaultAiMessageScript() {
+        return """
+                def lines = []
+                lines << "これからファイルを分割して送ります。"
+                lines << "フォルダA(${titleA}) ${countA}件"
+                filePathListA.eachWithIndex { p, i -> lines << "A ${i + 1}/${countA} ${p}" }
+                lines << ""
+                lines << "フォルダB(${titleB}) ${countB}件"
+                filePathListB.eachWithIndex { p, i -> lines << "B ${i + 1}/${countB} ${p}" }
+                lines << ""
+                lines << "これから順番に送ります。すべて送るまで解析しないでください。"
+                return lines.join("\\n")
+                """;
     }
 
     private void updateFileSuffixExcludeExtensionsFromField() {
@@ -1134,6 +1189,17 @@ public class FileCollectorFrame extends JFrame {
             SwingUtilities.invokeLater(() ->
                 JOptionPane.showMessageDialog(this, "各ファイル出力中にエラー: " + getErrorMessage(e), "エラー", JOptionPane.ERROR_MESSAGE)
             );
+        }
+    }
+
+    private void doOpenConfigDir() {
+        try {
+            Files.createDirectories(CONFIG_DIR);
+            Desktop.getDesktop().open(CONFIG_DIR.toFile());
+            appendLog("設定フォルダをエクスプローラで表示しました: " + CONFIG_DIR);
+        } catch (Exception e) {
+            appendLog("設定フォルダ表示エラー: " + getErrorMessage(e));
+            showError("設定フォルダを開けませんでした: " + getErrorMessage(e));
         }
     }
 
