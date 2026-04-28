@@ -1291,7 +1291,7 @@ public class FileCollectorFrame extends JFrame {
 
             String baseName = root.getFileName() != null ? root.getFileName().toString() : "filecollector";
             Path outDir = TREE_OUTPUT_DIR;
-            Path outPath = outDir.resolve(baseName + ".tree.txt");
+            Path outPath = resolveUniqueTreeOutputPath(outDir, baseName, title, label);
 
             Files.createDirectories(outDir);
 
@@ -1309,6 +1309,29 @@ public class FileCollectorFrame extends JFrame {
                 JOptionPane.showMessageDialog(this, "ファイル tree 出力中にエラー: " + getErrorMessage(e), "エラー", JOptionPane.ERROR_MESSAGE)
             );
         }
+    }
+
+    private static Path resolveUniqueTreeOutputPath(Path outDir, String baseName, String title, String label) {
+        String safeBaseName = sanitizeFileNamePart(baseName, "filecollector");
+        String safeTitle = sanitizeFileNamePart(title, label);
+        String rootName = safeTitle + "_" + safeBaseName;
+        Path firstChoice = outDir.resolve(rootName + ".tree.txt");
+        if (!Files.exists(firstChoice)) return firstChoice;
+
+        int index = 2;
+        while (true) {
+            Path candidate = outDir.resolve(rootName + "(" + index + ").tree.txt");
+            if (!Files.exists(candidate)) return candidate;
+            index++;
+        }
+    }
+
+    private static String sanitizeFileNamePart(String value, String fallback) {
+        String normalized = value != null ? value.trim() : "";
+        if (normalized.isEmpty()) normalized = fallback != null ? fallback.trim() : "";
+        if (normalized.isEmpty()) normalized = "filecollector";
+        String sanitized = normalized.replaceAll("[\\\\/:*?\"<>|]", "_");
+        return sanitized.isEmpty() ? "filecollector" : sanitized;
     }
 
     private String fileNameWithSuffix(String fileName, String suffix) {
