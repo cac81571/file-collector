@@ -70,6 +70,16 @@ Java + Swing で作ったファイル収集ツールです。
 - `clipboard-suffix.txt` : 末尾付加
 - `file-suffix.txt` : 拡張子追加文字
 - `file-suffix-exclude-extensions.txt` : 拡張子追加対象外
+- `ai-message-templates.txt` : AI用メッセージテンプレート一覧（複数登録）
+
+## AI用メッセージテンプレート
+
+- 設定ファイル `~/.filecollector/ai-message-templates.txt` に複数テンプレートを登録できます。
+- 画面上の `AI用メッセージ` プルダウンでテンプレートを選び、ボタン押下時に選択テンプレートで出力します。
+- ファイル形式は `name=template` の1行形式で、改行は `\n` で記述します。
+- 利用可能プレースホルダ:
+  - `#{count}`: 抽出結果件数
+  - `#{list}`: `1/10 [タイトル] path` 形式の一覧
 
 ## ビルド & 実行
 
