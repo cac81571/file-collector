@@ -97,7 +97,7 @@ public class FileCollectorFrame extends JFrame {
     private final JTextArea clipboardPrefixField = new JTextArea("# File: #{filepath}\r\n```#{ext}\r\n", 2, 12);
     private final JTextArea clipboardSuffixField = new JTextArea("```\r\n", 2, 12);
     private final JCheckBox clipboardAddPrefixSuffixCheckBox = new JCheckBox("先頭・末尾文字付加", true);
-    private final JButton aiMessageButton = new JButton("AI用メッセージ");
+    private final JButton aiMessageButton = new JButton("実行");
     private final JComboBox<String> aiMessageTemplateCombo = new JComboBox<>();
     private final JButton openConfigDirButton = new JButton("設定フォルダを開く");
     private final JButton copyFilesButton = new JButton("ファイルに出力");
@@ -488,7 +488,7 @@ public class FileCollectorFrame extends JFrame {
         bottomLeftPanel.add(openConfigDirButton);
         bottomButtonsPanel.add(bottomLeftPanel, BorderLayout.WEST);
         JPanel bottomRightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 4));
-        bottomRightPanel.add(new JLabel("AI用メッセージ"));
+        bottomRightPanel.add(new JLabel("Groovy プログラム"));
         aiMessageTemplateCombo.setPreferredSize(new Dimension(180, aiMessageTemplateCombo.getPreferredSize().height));
         bottomRightPanel.add(aiMessageTemplateCombo);
         bottomRightPanel.add(aiMessageButton);
